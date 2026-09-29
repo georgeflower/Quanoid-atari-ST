@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+build/
+*.o
+*.elf
+*.PRG
+*.prg
+*.ST
+*.st
+*.log
