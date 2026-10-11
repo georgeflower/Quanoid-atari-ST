@@ -8,3 +8,5 @@ build/
 *.ST
 *.st
 *.log
+src/main.c
+!releases/*.PRG
