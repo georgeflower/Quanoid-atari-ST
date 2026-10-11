@@ -52,7 +52,7 @@ emit). A Python-based ELF→Atari PRG converter (`tools/elf2prg.py`) handles
 GEMDOS relocation.
 
 ```sh
-make            # builds build/QUAN.PRG (release) and build/QUANTEST.PRG (autopilot test build)
+make            # builds build/QUANOID.PRG (release) and build/QUANTEST.PRG (autopilot test build)
 ```
 
 Other targets (`QMICRO.PRG`, `QSNDDG.PRG`, `QEXITA.PRG`, etc.) are
@@ -66,12 +66,12 @@ automatically by `make`.
 
 ## Running
 
-Copy `build/QUAN.PRG` to a TOS-bootable disk image or hard drive folder and
+Copy `build/QUANOID.PRG` to a TOS-bootable disk image or hard drive folder and
 launch it, or run it under [Hatari](https://hatari.tuxfamily.org/) with a
 TOS/EmuTOS ROM:
 
 ```sh
-hatari --tos /path/to/tos.img --auto build/QUAN.PRG
+hatari --tos /path/to/tos.img --auto build/QUANOID.PRG
 ```
 
 ## Source layout

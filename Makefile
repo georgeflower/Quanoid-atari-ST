@@ -6,7 +6,7 @@ CFLAGS  = -m68000 -mstrict-align -fno-store-merging -O2 -fno-ivopts -fomit-frame
 LIBGCC  = $(shell $(CC) -m68000 -print-libgcc-file-name)
 OBJS    = build/crt0.o build/sys.o build/math.o build/gfx.o build/ikbd.o build/blitfast.o
 
-all: build/QUAN.PRG build/QUANTEST.PRG
+all: build/QUANOID.PRG build/QUANTEST.PRG
 
 src/main.c: src/main_head.c src/game_part.c src/boss_part.c tools/assemble.py
 	python3 tools/assemble.py $@
@@ -25,7 +25,7 @@ build/main_test.o: src/main.c src/levels.h src/font.h src/sfx.h
 build/%.elf: $(OBJS) build/%.o src/link.ld
 	$(LD) -T src/link.ld --emit-relocs --no-warn-rwx-segments -z noexecstack -o $@ $(filter %.o,$^)
 
-build/QUAN.PRG: build/main.elf
+build/QUANOID.PRG: build/main.elf
 	sh tools/checkalign.sh $<
 	python3 tools/elf2prg.py $< $@
 build/QUANTEST.PRG: build/main_test.elf
