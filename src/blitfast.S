@@ -73,3 +73,61 @@ row:
 	dbra	%d7,row
 	movem.l	(%sp)+,%d2-%d7/%a2
 	rts
+
+| void blit_sh(u8 *buf, int x, int y, const Sprite *s)
+| Shifting blitter (any width): same result as the C blit(), but the shifts
+| are single lsl.l's and the masks are applied straight to screen memory.
+	.globl	blit_sh
+blit_sh:
+	movem.l	%d2-%d7/%a2-%a3,-(%sp)
+	move.l	36(%sp),%a0		| buf
+	move.l	40(%sp),%d0		| x
+	move.l	44(%sp),%d1		| y
+	move.l	48(%sp),%a3		| sprite
+	mulu.w	#160,%d1
+	add.l	%d1,%a0
+	move.l	%d0,%d1
+	lsr.l	#4,%d1
+	lsl.l	#3,%d1
+	add.l	%d1,%a0			| first group
+	and.l	#15,%d0
+	moveq	#16,%d6
+	sub.l	%d0,%d6			| d6 = 16 - shift
+	move.w	2(%a3),%d7
+	subq.w	#1,%d7			| rows - 1
+	move.w	4(%a3),%d5
+	subq.w	#1,%d5			| groups - 1
+	move.l	8(%a3),%a1		| data
+brow:
+	move.l	%a0,%a2
+	move.w	%d5,%d4
+bgrp:
+	moveq	#0,%d0
+	move.w	(%a1)+,%d0
+	beq	bskip
+	lsl.l	%d6,%d0
+	not.l	%d0
+	move.w	%d0,%d1
+	swap	%d0			| d0 = ~mask_hi, d1 = ~mask_lo
+	moveq	#3,%d3
+	move.l	%a2,%a3
+bpl:
+	moveq	#0,%d2
+	move.w	(%a1)+,%d2
+	lsl.l	%d6,%d2
+	and.w	%d1,8(%a3)
+	or.w	%d2,8(%a3)
+	swap	%d2
+	and.w	%d0,(%a3)
+	or.w	%d2,(%a3)+
+	dbra	%d3,bpl
+	bra	bnext
+bskip:
+	addq.l	#8,%a1
+bnext:
+	addq.l	#8,%a2
+	dbra	%d4,bgrp
+	lea	160(%a0),%a0
+	dbra	%d7,brow
+	movem.l	(%sp)+,%d2-%d7/%a2-%a3
+	rts

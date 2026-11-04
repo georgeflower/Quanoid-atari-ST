@@ -55,6 +55,7 @@ void irq_restore(long);
 void line_asm(u8 *buf, int x0, int y0, int x1, int y1, int col);
 void restore_asm(u8 *dst, const u8 *src, int groups, int rows);
 void line_plane(u8 *buf, int x0, int y0, int x1, int y1, int plane);
+void blit_sh(u8 *buf, int x, int y, const void *s);
 void blit_pre(u8 *buf, int gx, int y, int h, const u16 *tab);
 #define VERSION "V2.8"
 long ikbdws(long count, const char *buf);
@@ -247,22 +248,7 @@ static void make_sprite(Sprite *s, const char *pix, int w, int h)
 
 static void blit(u8 *buf, int x, int y, const Sprite *s)
 {
-    int sh = x & 15, gx = x >> 4, r, i, pl;
-    const u16 *d = s->d;
-    for (r = 0; r < s->h; r++) {
-        u16 *row = (u16 *)(buf + (y + r) * 160) + gx * 4;
-        for (i = 0; i < s->ng; i++, d += 5) {
-            u32 m = ((u32)d[0] << 16) >> sh;
-            u16 mh = (u16)(m >> 16), ml = (u16)m;
-            u16 *a = row + i * 4, *b = a + 4;
-            if (!m) continue;
-            for (pl = 0; pl < 4; pl++) {
-                u32 v = ((u32)d[1 + pl] << 16) >> sh;
-                a[pl] = (u16)((a[pl] & ~mh) | (u16)(v >> 16));
-                b[pl] = (u16)((b[pl] & ~ml) | (u16)v);
-            }
-        }
-    }
+    blit_sh(buf, x, y, s);
 }
 
 /* ---- font (own 5x7 glyphs in 8x8 cells) ---- */
