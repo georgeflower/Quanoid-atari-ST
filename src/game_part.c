@@ -78,7 +78,7 @@ static void sfx_tick(void)
 }
 
 /* pitch: period scale in 8.8 (256 = as designed, 128 = one octave up) */
-static void sfx_play(int id);
+void sfx_play(int id);
 
 static void sfx_play_pitch(int id, u16 pitch)
 {
@@ -113,7 +113,7 @@ static void sfx_play_pitch(int id, u16 pitch)
 #endif
 }
 
-static void sfx_play(int id)
+void sfx_play(int id)
 {
     sfx_plays++;
 #ifdef DOSOUND
@@ -149,7 +149,7 @@ static void sfx_exit(void)
 
 /* ---- game state ---- */
 enum { B_EMPTY = 0, B_NORMAL = 1, B_METAL = 2, B_EXPL = 3, B_CRACK = 4 };
-static u8 cell_type[BROWS * BCOLS];
+u8 cell_type[BROWS * BCOLS];
 static u8 cell_hits[BROWS * BCOLS];
 static u8 cell_max[BROWS * BCOLS];
 static int bricks_left;           /* destructible */
@@ -169,10 +169,10 @@ static int bricks_drawn_frame, hud_drawn_frame;
 typedef struct { s32 x, y, vx, vy; s16 speed; u8 active; } Ball;
 static Ball balls[MAX_BALLS];
 static int ball_stuck;
-static int frames_since_hit;
+int frames_since_hit;
 static u16 speed_mult = 256;      /* slowdown multiplier, 8.8 (min 0.9) */
 
-static int paddle_x, paddle_w;
+int paddle_x, paddle_w;
 static Sprite spr_ball, spr_fireball, spr_paddle, spr_nub, spr_bullet;
 
 /* power-ups (rules from the web game's usePowerUps / powerUpWeights) */
@@ -207,10 +207,10 @@ static int exit_caps_seen;
 #ifdef TEST
 static int exit_hud_shot_in;
 #endif
-static int fireball_timer;            /* frames */
+int fireball_timer;            /* frames */
 static int turret_shots;
 static int has_shield;
-static int has_barrier;
+int has_barrier;
 
 #define MAX_BULLETS 4
 typedef struct { s16 x, y; u8 active; } Bullet;
@@ -605,7 +605,7 @@ static void draw_walls(void)
     stars_reset();
 }
 
-static void draw_barrier(void)
+void draw_barrier(void)
 {
     fill_rect(bg, PF_X, BARRIER_Y, PF_X2 - PF_X, 2, has_barrier ? COL_LIGHT : COL_BG);
     if (has_barrier) {
@@ -1234,7 +1234,7 @@ static void detonate(int i)
 }
 
 /* returns 1 if the brick was removed */
-static int damage_brick(int i, Ball *b, int fire)
+int damage_brick(int i, Ball *b, int fire)
 {
     if (cell_type[i] == B_METAL) { sfx_play(SFX_BOUNCE); return 0; }
     if (cell_type[i] == B_CRACK && !fire) {
@@ -1265,82 +1265,31 @@ static int cell_at(int px, int py)
     return cell_type[r * BCOLS + c] ? r * BCOLS + c : -1;
 }
 
-static int box_hit(int x, int y)
-{
-    int h;
-    if ((h = cell_at(x, y)) >= 0) return h;
-    if ((h = cell_at(x + BALL_S - 1, y)) >= 0) return h;
-    if ((h = cell_at(x, y + BALL_S - 1)) >= 0) return h;
-    return cell_at(x + BALL_S - 1, y + BALL_S - 1);
-}
+/* gfx2.S: brick under the ball, and the stepped ball movement */
+int box_hit(int x, int y);
+int move_ball(Ball *b);
+int boss_ball_hit(Ball *b);
+void enemy_hurt(int i);
 
-static void paddle_bounce(Ball *b)
+/* the constants hard-coded in gfx2.S */
+_Static_assert(PF_X == 8 && PF_X2 == 216 && PF_Y == 8 && BR_Y == 16, "gfx2.S playfield");
+_Static_assert(BCOLS == 13 && BROWS == 14 && BALL_S == 4, "gfx2.S bricks");
+_Static_assert(PAD_Y == 184 && BARRIER_Y == 196 && MAX_DIRTY == 96, "gfx2.S layout");
+_Static_assert(sizeof(dirty[0]) == 96 * 8, "gfx2.S dirty list");
+_Static_assert(MAX_ENEMIES == 3 && ENEMY_SIZE == 12, "gfx2.S enemies");
+_Static_assert(sizeof(Enemy) == 24 && __builtin_offsetof(Enemy, active) == 16 &&
+               __builtin_offsetof(Enemy, x) == 0 && __builtin_offsetof(Enemy, y) == 4, "gfx2.S Enemy");
+_Static_assert(__builtin_offsetof(Ball, x) == 0 && __builtin_offsetof(Ball, y) == 4 &&
+               __builtin_offsetof(Ball, vx) == 8 && __builtin_offsetof(Ball, vy) == 12, "gfx2.S Ball");
+_Static_assert(B_METAL == 2 && SFX_BOUNCE == 0 && SFX_BARRIERSAVE == 11, "gfx2.S ids");
+
+void paddle_bounce(Ball *b)
 {
     sfx_play(SFX_BOUNCE);
     combo = 0;
     int cx = (int)(b->x >> 8) + BALL_S / 2;
     set_ball_dir(b, ((cx - paddle_x) * 32) / paddle_w);
     frames_since_hit = 0;
-}
-
-/* returns 1 if the ball fell out */
-static int move_ball(Ball *b)
-{
-    s32 ax = b->vx < 0 ? -b->vx : b->vx;
-    s32 ay = b->vy < 0 ? -b->vy : b->vy;
-    int steps = (int)(((ax > ay ? ax : ay) >> 8) + 1), s;
-    s32 sx = b->vx / steps, sy = b->vy / steps;
-    int fire = fireball_timer > 0;
-
-    for (s = 0; s < steps; s++) {
-        int x, y, h;
-        b->x += sx;
-        x = (int)(b->x >> 8); y = (int)(b->y >> 8);
-        if (boss_ball_hit(b) || enemy_ball_hit(b)) {
-            b->x -= sx; sx = -sx; b->vx = -b->vx;
-            frames_since_hit = 0;
-        } else if (x < PF_X || x + BALL_S > PF_X2) {
-            b->x -= sx; sx = -sx; b->vx = -b->vx;
-            frames_since_hit = 0;
-            sfx_play(SFX_BOUNCE);
-        } else if ((h = box_hit(x, y)) >= 0) {
-            frames_since_hit = 0;
-            if (!(fire && cell_type[h] != B_METAL)) {
-                b->x -= sx; sx = -sx; b->vx = -b->vx;
-            }
-            damage_brick(h, b, fire);
-        }
-        b->y += sy;
-        x = (int)(b->x >> 8); y = (int)(b->y >> 8);
-        if (boss_ball_hit(b) || enemy_ball_hit(b)) {
-            b->y -= sy; sy = -sy; b->vy = -b->vy;
-            frames_since_hit = 0;
-        } else if (y < PF_Y) {
-            b->y -= sy; sy = -sy; b->vy = -b->vy;
-            frames_since_hit = 0;
-            sfx_play(SFX_BOUNCE);
-        } else if ((h = box_hit(x, y)) >= 0) {
-            frames_since_hit = 0;
-            if (!(fire && cell_type[h] != B_METAL)) {
-                b->y -= sy; sy = -sy; b->vy = -b->vy;
-            }
-            damage_brick(h, b, fire);
-        } else if (sy > 0 && y + BALL_S >= PAD_Y && y + BALL_S <= PAD_Y + 3 &&
-                   x + BALL_S > paddle_x && x < paddle_x + paddle_w) {
-            b->y = (s32)(PAD_Y - BALL_S) << 8;
-            paddle_bounce(b);
-            sx = b->vx / steps; sy = b->vy / steps;
-        } else if (sy > 0 && has_barrier && y + BALL_S >= BARRIER_Y) {
-            b->y = (s32)(BARRIER_Y - BALL_S) << 8;
-            sy = -sy; b->vy = -b->vy;
-            has_barrier = 0;
-            draw_barrier();
-            sfx_play(SFX_BARRIERSAVE);
-        } else if (y >= 200 - BALL_S) {
-            return 1;
-        }
-    }
-    return 0;
 }
 
 static void process_pending(void)

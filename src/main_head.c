@@ -55,6 +55,8 @@ void irq_restore(long);
 void line_asm(u8 *buf, int x0, int y0, int x1, int y1, int col);
 void restore_asm(u8 *dst, const u8 *src, int groups, int rows);
 void line_plane(u8 *buf, int x0, int y0, int x1, int y1, int plane);
+int ball_box(int x, int y, int bx, int by, int w, int h);   /* gfx2.S */
+int enemy_scan(const void *enemies, int x, int y);
 void blit_sh(u8 *buf, int x, int y, const void *s);
 void blit_pre(u8 *buf, int gx, int y, int h, const u16 *tab);
 #define VERSION "V2.8"
@@ -177,24 +179,7 @@ static void set_palette(void)
 }
 
 /* ---- drawing ---- */
-static void fill_rect(u8 *buf, int x, int y, int w, int h, int col)
-{
-    int x2 = x + w - 1, gx = x >> 4, ge = x2 >> 4, g, pl, yy;
-    u16 mf = (u16)(0xffff >> (x & 15));
-    u16 ml = (u16)(0xffff << (15 - (x2 & 15)));
-    for (yy = y; yy < y + h; yy++) {
-        u16 *row = (u16 *)(buf + yy * 160);
-        for (g = gx; g <= ge; g++) {
-            u16 m = 0xffff, *p = row + g * 4;
-            if (g == gx) m &= mf;
-            if (g == ge) m &= ml;
-            for (pl = 0; pl < 4; pl++) {
-                if ((col >> pl) & 1) p[pl] |= m;
-                else p[pl] &= (u16)~m;
-            }
-        }
-    }
-}
+void fill_rect(u8 *buf, int x, int y, int w, int h, int col);   /* gfx2.S */
 
 static void plot(u8 *buf, int x, int y, int col)
 {
@@ -261,54 +246,23 @@ static void blit(u8 *buf, int x, int y, const Sprite *s)
 #include "font.h"
 #include "sprites.h"
 
+void draw_text_a(u8 *buf, int x, int y, const char *s, int col, int bgc, const u8 *font);
+
 static void draw_text(u8 *buf, int x, int y, const char *str, int col, int bgc)
 {
-    for (; *str; str++, x += 8) {
-        int ch = (u8)*str, r, pl, sh = x & 15;
-        const u8 *gl;
-        if (ch < 32 || ch > 127) ch = 32;
-        gl = font8[ch - 32];
-        for (r = 0; r < 8; r++) {
-            u16 *a = (u16 *)(buf + (y + r) * 160) + (x >> 4) * 4, *b = a + 4;
-            u32 m = 0xff000000UL >> sh, g = (u32)gl[r] << 24 >> sh;
-            u16 mh = (u16)(m >> 16), ml = (u16)m, gh = (u16)(g >> 16), gl2 = (u16)g;
-            for (pl = 0; pl < 4; pl++) {
-                u16 vh = 0, vl = 0;
-                if ((col >> pl) & 1) { vh |= gh; vl |= gl2; }
-                if ((bgc >> pl) & 1) { vh |= mh & ~gh; vl |= ml & ~gl2; }
-                a[pl] = (u16)((a[pl] & ~mh) | vh);
-                if (ml) b[pl] = (u16)((b[pl] & ~ml) | vl);
-            }
-        }
-    }
+    draw_text_a(buf, x, y, str, col, bgc, &font8[0][0]);
 }
 
 /* ---- dirty rects ---- */
 typedef struct { s16 x, y, w, h; } Rect;
 #define MAX_DIRTY 96
-static Rect dirty[2][MAX_DIRTY];
-static int ndirty[2];
+Rect dirty[2][MAX_DIRTY];          /* add_dirty() is in gfx2.S and owns these */
+int ndirty[2];
 
-static u32 dirty_overflow;
-static u16 dirty_peak;
+u32 dirty_overflow;
+u16 dirty_peak;
 
-static void add_dirty(int b, int x, int y, int w, int h)
-{
-    Rect *r;
-    if (ndirty[b] > (int)dirty_peak) dirty_peak = (u16)ndirty[b];
-    /* Merging overlapping rectangles was measured to cost more than the
-       restores it saved (2285 vs 1523 missed frames per 30000), so the list
-       is simply 96 entries deep with a whole-screen fallback. */
-    if (ndirty[b] >= MAX_DIRTY) {          /* still full: restore everything */
-        dirty_overflow++;
-        ndirty[b] = 1;
-        dirty[b][0].x = 0; dirty[b][0].y = 0;
-        dirty[b][0].w = 320; dirty[b][0].h = 200;
-        return;
-    }
-    r = &dirty[b][ndirty[b]++];
-    r->x = (s16)x; r->y = (s16)y; r->w = (s16)w; r->h = (s16)h;
-}
+void add_dirty(int b, int x, int y, int w, int h);
 static void dirty_both(int x, int y, int w, int h)
 {
     add_dirty(0, x, y, w, h);

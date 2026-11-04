@@ -28,7 +28,7 @@ typedef struct { s32 x, y, vx, vy; u8 active; } Bomb;
 static Bomb bombs[MAX_BOMBS];
 static int enemy_hit_paddle;
 
-static Enemy enemies[MAX_ENEMIES];
+Enemy enemies[MAX_ENEMIES];                  /* scanned by gfx2.S */
 static int enemy_timer, enemy_spawns;
 #ifdef TEST
 static int enemy_shot_in;
@@ -191,20 +191,12 @@ static void enemies_update(void)
 }
 
 /* ball against enemies: bounces and damages, like a brick */
-static int enemy_ball_hit(Ball *b)
+/* a ball hit enemy i (found by enemy_scan in gfx2.S) */
+void enemy_hurt(int i)
 {
-    int i, x = (int)(b->x >> 8), y = (int)(b->y >> 8);
-    for (i = 0; i < MAX_ENEMIES; i++) {
-        Enemy *e = &enemies[i];
-        int ex, ey;
-        if (!e->active) continue;
-        ex = (int)(e->x >> 8); ey = (int)(e->y >> 8);
-        if (x + BALL_S <= ex || x >= ex + ENEMY_SIZE || y + BALL_S <= ey || y >= ey + ENEMY_SIZE) continue;
-        if (--e->hits == 0) enemy_kill(e);
-        else sfx_play(SFX_ENEMYHIT);
-        return 1;
-    }
-    return 0;
+    Enemy *e = &enemies[i];
+    if (--e->hits == 0) enemy_kill(e);
+    else sfx_play(SFX_ENEMYHIT);
 }
 
 static int enemy_bullet_hit(int bx, int by)

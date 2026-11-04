@@ -75,7 +75,8 @@ static const u8 boss_pos[9][2] = {
 typedef struct { s32 x, y, vx, vy; u8 active, size, kind, timer; } Shot;
 
 static const BossDef *bd;
-static int boss_active, boss_shape, boss_phase, boss_hp, boss_hp_max;
+int boss_active;                      /* read by gfx2.S */
+static int boss_shape, boss_phase, boss_hp, boss_hp_max;
 static int boss_x, boss_y;            /* 8.8, top-left of the box */
 static int boss_tx, boss_ty;          /* target position */
 static int boss_timer, boss_warn, boss_warn_kind, boss_hitcool, boss_flash;
@@ -471,12 +472,12 @@ static int boss_update(void)
 }
 
 /* ball against the boss box */
-static int boss_ball_hit(Ball *b)
+int boss_ball_hit(Ball *b)
 {
     int x = (int)(b->x >> 8), y = (int)(b->y >> 8);
     int bx = boss_x >> 8, by = boss_y >> 8;
     if (!boss_active || boss_dead_timer) return 0;
-    if (x + BALL_S <= bx || x >= bx + bd->w || y + BALL_S <= by || y >= by + bd->h) return 0;
+    if (!ball_box(x, y, bx, by, bd->w, bd->h)) return 0;
     boss_damage(1);
     return 1;
 }
