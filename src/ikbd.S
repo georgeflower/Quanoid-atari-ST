@@ -234,11 +234,80 @@ vbl_remove2:
 	move.l	old_vbl,0x70.w
 	move.w	(%sp)+,%sr
 	rts
+| Applies the raster entry at a0 (colours first, while the beam is still in
+| horizontal blank), arms Timer B for its length and advances raster_ptr.
+	.macro	rast_apply
+	move.w	6(%a0),0xffff8240.w	| colour 0
+	move.l	(%a0),0xffff824a.w	| colours 5, 6
+	move.w	4(%a0),0xffff8242.w	| colour 1
+	clr.b	0xfffffa1b.w
+	move.w	8(%a0),%d0		| 0 = end of list: leave Timer B stopped
+	beq.s	9f
+	move.b	%d0,0xfffffa21.w
+	move.b	#8,0xfffffa1b.w		| event count mode
+9:	lea	12(%a0),%a0
+	move.l	%a0,raster_ptr
+	.endm
+
 vbl_isr:
 	addq.l	#1,vbl_count
-	move.l	old_vbl,-(%sp)		| chain to TOS's VBL handler
+	tst.l	raster_tab
+	beq.s	1f
+	movem.l	%d0/%a0,-(%sp)
+	move.l	raster_tab,%a0
+	rast_apply
+	movem.l	(%sp)+,%d0/%a0
+1:	move.l	old_vbl,-(%sp)		| chain to TOS's VBL handler
 	rts
+
+| ---- raster palette: Timer B (HBL event count) re-programs palette
+| registers 0, 1, 5 and 6 between scanline bands, so the game shows far more
+| than 16 colours per frame. raster_tab points at 12-byte entries
+| { c5, c6, c1, c0, lines, pad }; the entry applies for 'lines' scanlines,
+| and lines == 0 ends the list.
+	.globl	raster_install, raster_remove, raster_tab
+raster_install:
+	move.w	%sr,-(%sp)
+	move.w	#0x2700,%sr
+	clr.b	0xfffffa1b.w
+	move.l	0x120.w,old_tb
+	move.l	#tb_isr,0x120.w
+	bset	#0,0xfffffa07.w
+	bset	#0,0xfffffa13.w
+	move.w	(%sp)+,%sr
+	rts
+raster_remove:
+	move.w	%sr,-(%sp)
+	move.w	#0x2700,%sr
+	clr.b	0xfffffa1b.w
+	bclr	#0,0xfffffa13.w
+	bclr	#0,0xfffffa07.w
+	move.l	old_tb,0x120.w
+	move.w	(%sp)+,%sr
+	rts
+
+tb_isr:
+	move.l	%a0,-(%sp)
+	move.l	raster_ptr,%a0
+	move.w	6(%a0),0xffff8240.w
+	move.l	(%a0),0xffff824a.w
+	move.w	4(%a0),0xffff8242.w
+	move.l	%d0,-(%sp)
+	clr.b	0xfffffa1b.w
+	move.w	8(%a0),%d0
+	beq.s	1f
+	move.b	%d0,0xfffffa21.w
+	move.b	#8,0xfffffa1b.w
+1:	lea	12(%a0),%a0
+	move.l	%a0,raster_ptr
+	bclr	#0,0xfffffa0f.w		| software end-of-interrupt
+	move.l	(%sp)+,%d0
+	move.l	(%sp)+,%a0
+	rte
 
 	.bss
 old_vbl:	.ds.l	1
 vbl_count:	.ds.l	1
+old_tb:		.ds.l	1
+raster_ptr:	.ds.l	1
+raster_tab:	.ds.l	1

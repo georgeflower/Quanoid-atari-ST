@@ -180,8 +180,13 @@ enum { PU_MULTI, PU_TURRET, PU_FIRE, PU_EXTEND, PU_SHRINK, PU_SHIELD, PU_BARRIER
 static const u16 pu_base_weight[PU_COUNT] = { 150, 150, 150, 150, 80, 150, 150, 100, 0 };
 /* up to two characters per capsule */
 static const char pu_text[PU_COUNT][3] = { "M", "T", "F", "+", "-", "S", "B", "+1", "?" };
-static const u8 pu_colour[PU_COUNT] = { 14, 14, 10, 14, 9, 14, 14, 10, 12 };
+/* M green, T red, F orange, + blue, - purple, S gold, B grey, +1 white, ? metal */
+static const u8 pu_colour[PU_COUNT] = { 3, 2, 10, 13, 4, 8, 14, 12, 9 };
 static Sprite spr_cap[PU_COUNT];
+#define BALL_FR 8                       /* spin frames of the ball */
+#define CAP_FR 6                        /* roll frames of a falling capsule */
+static Sprite spr_ballf[BALL_FR], spr_firef[BALL_FR];
+static Sprite spr_capf[PU_COUNT][CAP_FR];
 static u8 pu_drops[PU_COUNT];         /* per level, for weight decay */
 static u16 life_groups_used;          /* bit per level group (level / 5) */
 static int life_dropped_this_level;
@@ -189,7 +194,7 @@ static int bricks_since_drop;
 static u32 pu_collected[PU_COUNT];
 
 #define MAX_CAPS 6
-#define CAP_W 14
+#define CAP_W 18
 #define CAP_H 8
 typedef struct { s16 x; s32 y; u8 type, active; s8 pair; } Cap;
 static Cap caps[MAX_CAPS];
@@ -297,26 +302,41 @@ static void draw_brick(int i)
     fill_rect(bg, x, y, 16, 8, COL_BG);
     if (t == B_EMPTY) { dirty_both(x, y, 16, 8); return; }
     if (t == B_METAL) {
-        fill_rect(bg, x, y, 16, 8, COL_METAL);
-        fill_rect(bg, x, y, 16, 1, COL_LIGHT);
-        plot(bg, x + 3, y + 3, COL_LIGHT);
-        plot(bg, x + 12, y + 3, COL_LIGHT);
+        fill_rect(bg, x, y, 15, 7, COL_METAL);
+        fill_rect(bg, x, y, 15, 1, COL_LIGHT);
+        fill_rect(bg, x, y, 1, 7, COL_LIGHT);
+        fill_rect(bg, x, y + 6, 15, 1, COL_DARK);
+        fill_rect(bg, x + 14, y, 1, 7, COL_DARK);
+        plot(bg, x + 2, y + 2, COL_WHITE); plot(bg, x + 12, y + 2, COL_WHITE);
+        plot(bg, x + 2, y + 4, COL_DARK); plot(bg, x + 12, y + 4, COL_DARK);
+        fill_rect(bg, x + 5, y + 3, 5, 1, COL_LIGHT);
+        fill_rect(bg, x + 6, y + 4, 4, 1, COL_SHADE);
     } else {
-        int col = t == B_EXPL ? COL_EXPL : t == B_CRACK ? COL_CRACK : 1 + r % 8;
+        int col = t == B_EXPL ? COL_EXPL : t == B_CRACK ? COL_CRACK : COL_BRICK;
         int dmg = cell_max[i] - cell_hits[i], k;
         fill_rect(bg, x, y, 15, 7, col);
         fill_rect(bg, x, y, 15, 1, COL_WHITE);
-        fill_rect(bg, x, y + 6, 15, 1, COL_DARK);
+        fill_rect(bg, x, y, 1, 7, COL_WHITE);
+        fill_rect(bg, x + 1, y + 6, 14, 1, COL_DARK);
+        fill_rect(bg, x + 14, y + 1, 1, 6, COL_DARK);
+        plot(bg, x + 14, y, COL_BG); plot(bg, x, y + 6, COL_BG);
         if (t == B_EXPL) {
-            fill_rect(bg, x + 6, y + 1, 3, 3, COL_WHITE);
+            for (k = 1; k < 14; k += 4) {          /* hazard stripes */
+                fill_rect(bg, x + k, y + 1, 2, 1, COL_DARK);
+                fill_rect(bg, x + k + 2, y + 5, 2, 1, COL_DARK);
+            }
+            fill_rect(bg, x + 6, y + 2, 3, 3, COL_WHITE);
+            plot(bg, x + 7, y + 3, COL_EXPL);
             if (cell_max[i] > 1)                   /* dots = hits still needed */
                 for (k = 0; k < cell_hits[i]; k++)
-                    fill_rect(bg, x + 2 + k * 4, y + 4, 2, 2, COL_WHITE);
+                    plot(bg, x + 2 + k * 3, y + 3, COL_WHITE);
         } else if (t == B_CRACK) {
             if (dmg >= 1) { plot(bg, x + 4, y + 2, COL_DARK); plot(bg, x + 5, y + 3, COL_DARK); plot(bg, x + 5, y + 4, COL_DARK); }
             if (dmg >= 2) { plot(bg, x + 10, y + 1, COL_DARK); plot(bg, x + 9, y + 2, COL_DARK); plot(bg, x + 10, y + 3, COL_DARK); plot(bg, x + 11, y + 4, COL_DARK); }
-        } else if (cell_max[i] > 1) {
-            for (k = 0; k < cell_hits[i]; k++) fill_rect(bg, x + 2 + k * 4, y + 3, 2, 2, COL_WHITE);
+        } else {
+            plot(bg, x + 2, y + 1, COL_WHITE); plot(bg, x + 3, y + 1, COL_WHITE);
+            if (cell_max[i] > 1)
+                for (k = 0; k < cell_hits[i]; k++) fill_rect(bg, x + 3 + k * 4, y + 3, 2, 2, COL_WHITE);
             if (dmg) fill_rect(bg, x + 1, y + 5, 13, 1, COL_DARK);
         }
     }
@@ -327,7 +347,7 @@ static void draw_number(int x, int y, u32 v, int digits)
 {
     char b[12], *s = utoa(v, b + 11);
     while (b + 11 - s < digits) *--s = '0';
-    draw_text(bg, x, y, s, COL_WHITE, COL_DARK);
+    draw_text(bg, x, y, s, COL_WHITE, COL_BG);
     dirty_both(x, y, digits * 8, 8);
 }
 
@@ -378,8 +398,8 @@ static void draw_score(void)
         if (s[i] != hud_score_prev[i]) {
             char one[2];
             one[0] = s[i]; one[1] = 0;
-            draw_text(bg, PANEL_X + 16 + i * 8, 40, one, COL_WHITE, COL_DARK);
-            dirty_both(PANEL_X + 16 + i * 8, 40, 8, 8);
+            draw_text(bg, PANEL_X + 16 + i * 8, 39, one, COL_WHITE, COL_BG);
+            dirty_both(PANEL_X + 16 + i * 8, 39, 8, 8);
             hud_score_prev[i] = s[i];
         }
     }
@@ -391,8 +411,17 @@ static void draw_hud(void)
     int i;
     for (i = 0; i < 8; i++) hud_score_prev[i] = 0;
     draw_score();
-    draw_number(PANEL_X + 48, 80, (u32)level_idx + 1, 2);
-    draw_number(PANEL_X + 48, 112, (u32)lives, 2);
+    draw_number(PANEL_X + 40, 76, (u32)level_idx + 1, 2);
+    draw_number(PANEL_X + 40, 108, (u32)lives, 2);
+    fill_rect(bg, PANEL_X + 10, 118, 76, 4, COL_BG);   /* one mini paddle per spare life */
+    for (i = 0; i < lives - 1 && i < 5; i++) {
+        int x = PANEL_X + 10 + i * 15;
+        fill_rect(bg, x, 118, 13, 4, COL_PADDLE);
+        fill_rect(bg, x, 118, 3, 4, COL_EXPL);
+        fill_rect(bg, x + 10, 118, 3, 4, COL_EXPL);
+        fill_rect(bg, x + 3, 118, 7, 1, COL_WHITE);
+    }
+    dirty_both(PANEL_X + 10, 118, 76, 4);
 }
 
 /* power-up status lines; each line is redrawn only when its own value changes */
@@ -440,31 +469,105 @@ static void draw_power_hud(void)
     }
 }
 
+/* inset frame, filled with the raster sky gradient */
+static void draw_box(int x, int y, int w, int h)
+{
+    fill_rect(bg, x, y, w, h, COL_BG);
+    fill_rect(bg, x, y, w, 1, COL_METAL);
+    fill_rect(bg, x, y, 1, h, COL_METAL);
+    fill_rect(bg, x, y + h - 1, w, 1, COL_LIGHT);
+    fill_rect(bg, x + w - 1, y, 1, h, COL_LIGHT);
+}
+
 static void draw_panel_labels(void)
 {
     fill_rect(bg, PANEL_X, 0, 320 - PANEL_X, 200, COL_DARK);
-    draw_text(bg, PANEL_X + 20, 12, "QUANOID", COL_EXPL, COL_DARK);
-    draw_text(bg, PANEL_X + 16, 30, "SCORE", COL_LIGHT, COL_DARK);
-    draw_text(bg, PANEL_X + 16, 70, "LEVEL", COL_LIGHT, COL_DARK);
-    draw_text(bg, PANEL_X + 16, 102, "LIVES", COL_LIGHT, COL_DARK);
+    draw_text(bg, PANEL_X + 20, 8, "QUANOID", COL_EXPL, COL_DARK);
+    fill_rect(bg, PANEL_X + 10, 18, 76, 1, COL_EXPL);
+    fill_rect(bg, PANEL_X + 10, 20, 76, 1, COL_METAL);
+    draw_text(bg, PANEL_X + 16, 26, "SCORE", COL_LIGHT, COL_DARK);
+    draw_box(PANEL_X + 8, 36, 80, 15);
+    draw_text(bg, PANEL_X + 16, 62, "LEVEL", COL_LIGHT, COL_DARK);
+    draw_box(PANEL_X + 8, 72, 80, 15);
+    draw_text(bg, PANEL_X + 16, 94, "LIVES", COL_LIGHT, COL_DARK);
+    draw_box(PANEL_X + 8, 104, 80, 22);
+    fill_rect(bg, PANEL_X + 10, 166, 76, 1, COL_METAL);
     draw_text(bg, PANEL_X + 8, 180, "ESC=PAUSE", COL_METAL, COL_DARK);
     draw_text(bg, PANEL_X + 8, 190, VERSION, COL_METAL, COL_DARK);
     draw_text(bg, PANEL_X + 8, 170, sfx_enabled ? "S=SFX ON " : "S=SFX OFF", COL_METAL, COL_DARK);
     hud_fire = hud_turret = hud_barrier = hud_shield = -1;
 }
 
+/* hull plating of a starship: dark edge, lit rim, three rows of panel, a
+   purple glow row and a cyan neon strip facing the playfield, with seams
+   and blinking-style status lights along the way */
 static void draw_walls(void)
 {
-    int i;
+    int i, W = PF_X2 + 8;
     fill_rect(bg, 0, 0, 320, 200, COL_BG);
-    fill_rect(bg, 0, 0, PF_X2 + 8, PF_Y, COL_LIGHT);
-    fill_rect(bg, 0, 0, PF_X, 200, COL_LIGHT);
-    fill_rect(bg, PF_X2, 0, 8, 200, COL_LIGHT);
-    for (i = 0; i < 200; i += 4) {
-        plot(bg, 3, i + 1, COL_METAL);
-        plot(bg, PF_X2 + 4, i + 3, COL_METAL);
+    fill_rect(bg, 0, 0, W, 200, COL_SHADE);
+    fill_rect(bg, PF_X, PF_Y, PF_X2 - PF_X, 200 - PF_Y, COL_BG);
+    /* top */
+    fill_rect(bg, 0, 0, W, 1, COL_DARK);
+    fill_rect(bg, 0, 1, W, 1, COL_LIGHT);
+    fill_rect(bg, PF_X, 5, PF_X2 - PF_X, 1, COL_PURPLE);
+    fill_rect(bg, PF_X, 6, PF_X2 - PF_X, 1, COL_PADDLE);
+    fill_rect(bg, PF_X, 7, PF_X2 - PF_X, 1, COL_DARK);
+    /* left and right */
+    fill_rect(bg, 0, 0, 1, 200, COL_DARK);
+    fill_rect(bg, 1, 1, 1, 199, COL_LIGHT);
+    fill_rect(bg, 5, PF_Y, 1, 192, COL_PURPLE);
+    fill_rect(bg, 6, PF_Y, 1, 192, COL_PADDLE);
+    fill_rect(bg, 7, PF_Y, 1, 192, COL_DARK);
+    fill_rect(bg, PF_X2, PF_Y, 1, 192, COL_DARK);
+    fill_rect(bg, PF_X2 + 1, PF_Y, 1, 192, COL_PADDLE);
+    fill_rect(bg, PF_X2 + 2, PF_Y, 1, 192, COL_PURPLE);
+    fill_rect(bg, PF_X2 + 6, 1, 1, 199, COL_LIGHT);
+    fill_rect(bg, PF_X2 + 7, 0, 1, 200, COL_DARK);
+    for (i = 16; i < 200; i += 16) {           /* panel seams */
+        fill_rect(bg, 2, i, 3, 1, COL_DARK);
+        fill_rect(bg, PF_X2 + 3, i, 3, 1, COL_DARK);
     }
-    for (i = 0; i < PF_X2 + 8; i += 4) plot(bg, i + 1, 3, COL_METAL);
+    for (i = 24; i < W - 8; i += 16) fill_rect(bg, i, 2, 1, 3, COL_DARK);
+    for (i = 8; i < 200; i += 32) {            /* status lights */
+        plot(bg, 3, i, COL_GREEN); plot(bg, PF_X2 + 4, i + 16, COL_RED);
+    }
+    for (i = 12; i < W - 8; i += 32) plot(bg, i, 3, (i & 32) ? COL_RED : COL_GREEN);
+    fill_rect(bg, 2, 2, 3, 3, COL_DARK);       /* corner bolts */
+    fill_rect(bg, PF_X2 + 3, 2, 3, 3, COL_DARK);
+    plot(bg, 3, 3, COL_WHITE); plot(bg, PF_X2 + 4, 3, COL_WHITE);
+}
+
+/* slow parallax starfield: three layers drift down at different speeds and
+   shift sideways against the paddle, giving depth. Stars live only in the
+   back buffer (each frame's dirty list wipes them) and only show where the
+   static background is empty. */
+#define NSTARS 24
+static u8 star_x[NSTARS], star_y[NSTARS];
+static int stars_ready;
+
+static void draw_stars(u8 *buf)
+{
+    static const u8 period[3] = { 14, 7, 4 };
+    static const u8 col[3] = { COL_SHADE, COL_METAL, COL_LIGHT };
+    static const u8 sh[3] = { 8, 7, 6 };
+    int i, w = PF_X2 - PF_X - 2, h = 192 - 2;
+    if (!stars_ready) {
+        for (i = 0; i < NSTARS; i++) { star_x[i] = (u8)(rnd() % w); star_y[i] = (u8)(rnd() % h); }
+        stars_ready = 1;
+    }
+    for (i = 0; i < NSTARS; i++) {
+        int l = i % 3;
+        int x = PF_X + 1 + ((int)star_x[i] - ((paddle_x - 100) >> sh[l]) + 4 * w) % w;
+        int y = PF_Y + ((int)star_y[i] + frame_no / period[l]) % h;
+        u16 *p = (u16 *)(bg + y * 160) + (x >> 4) * 4;
+        if (p[0] | p[1] | p[2] | p[3]) {
+            u16 m = (u16)(0x8000 >> (x & 15));
+            if ((p[0] | p[1] | p[2] | p[3]) & m) continue;
+        }
+        plot(buf, x, y, col[l]);
+        add_dirty(back, x, y, 1, 1);
+    }
 }
 
 static void draw_barrier(void)
@@ -483,23 +586,106 @@ static int paddle_shielded;
 static u32 ball_bad, draw_on_visible, late_flip;
 #endif
 
+/* ---- raster palette (see raster_* in ikbd.S): colours 0, 1, 5 and 6 are
+   reprogrammed between scanline bands, which is what gives this game far
+   more than 16 colours on screen. Colour 0 is a sky gradient behind
+   everything; colour 1 is the brick body, shaded in four 2-line steps per
+   brick row and tinted by the row's world colour; colours 5 and 6 carry a
+   different shade on each of the paddle's six scanlines. Nothing else may
+   use colours 1, 5 or 6. Values are 4-bit RGB: the STE shows all 16 levels,
+   a plain ST drops the low bit. ---- */
+#define RAST_N 128
+extern volatile unsigned long raster_tab;
+static u16 raster_ent[RAST_N][6];     /* c5, c6, c1, c0, lines, pad */
+static u16 brick_rgb[8];
+static const u8 title_col[8] = { 2, 3, 4, 8, 13, 10, 12, 14 };              /* the current world's row colours */
+
+static const u8 pad_shade[3][PAD_H][3] = {
+    /* steel body */
+    { {13,14,15}, {11,12,14}, {9,10,12}, {7,8,11}, {5,6,9}, {3,4,6} },
+    /* shielded body: cyan-white glow */
+    { {15,15,15}, {11,15,15}, {7,13,15}, {4,10,14}, {3,7,12}, {2,5,9} },
+    /* red end caps */
+    { {15,10,6}, {15,6,3}, {13,3,1}, {11,2,0}, {8,1,0}, {5,0,0} },
+};
+
+static u16 hw4(int r, int g, int b)
+{
+    return (u16)((((r & 1) << 3 | r >> 1) << 8) | (((g & 1) << 3 | g >> 1) << 4) |
+                 ((b & 1) << 3 | b >> 1));
+}
+
+static u16 bg_at(int y)
+{
+    int r = ((palette[0] >> 8) & 7) * 2;
+    int g = ((palette[0] >> 4) & 7) * 2 + y * 2 / 200;
+    int b = (palette[0] & 7) * 2 + y * 5 / 200;
+    if (r > 15) r = 15;
+    if (g > 15) g = 15;
+    if (b > 15) b = 15;
+    if (b < 0) b = 0;
+    return hw4(r, g, b);
+}
+
+/* one brick row, shaded top to bottom: lit, body, shadow, deep shadow */
+static u16 brick_line(int row, int step)
+{
+    static const u8 pct[4] = { 135, 108, 82, 58 };
+    u16 c = brick_rgb[row & 7];
+    int ch[3], i;
+    for (i = 0; i < 3; i++) {
+        int v = (c >> (8 - 4 * i)) & 7;
+        v = v * 15 / 7 * pct[step] / 100 + (step == 0 ? 2 : 0);
+        ch[i] = v > 15 ? 15 : v;
+    }
+    return hw4(ch[0], ch[1], ch[2]);
+}
+
+/* one entry per run of scanlines with identical colours, so a plain ST
+   (3-bit) still only takes the interrupts its bands need */
+static void raster_build(void)
+{
+    int n = 0, y;
+    u16 *e;
+    for (y = 0; y < 200; y++) {
+        u16 c5 = palette[COL_PADBODY], c6 = palette[COL_PADCAP], c1 = palette[COL_BRICK];
+        u16 c0 = bg_at(y & ~3);
+        int by = y - BR_Y, r = y - PAD_Y;
+        if (by >= 0 && by < BROWS * 8) c1 = brick_line(by >> 3, (by & 7) >> 1);
+        if (r >= 0 && r < PAD_H) {
+            const u8 *bd = pad_shade[paddle_shielded ? 1 : 0][r], *cp = pad_shade[2][r];
+            c5 = hw4(bd[0], bd[1], bd[2]);
+            c6 = hw4(cp[0], cp[1], cp[2]);
+        }
+        e = raster_ent[n - 1];
+        if (n && e[0] == c5 && e[1] == c6 && e[2] == c1 && e[3] == c0 && e[4] < 250) {
+            e[4]++;
+        } else {
+            e = raster_ent[n++];
+            e[0] = c5; e[1] = c6; e[2] = c1; e[3] = c0; e[4] = 1; e[5] = 0;
+        }
+    }
+    e = raster_ent[n];                     /* terminator restores the flat palette */
+    e[0] = palette[COL_PADBODY]; e[1] = palette[COL_PADCAP]; e[2] = palette[COL_BRICK];
+    e[3] = palette[0]; e[4] = 0; e[5] = 0;
+    raster_tab = (unsigned long)raster_ent;
+}
+
 static void build_paddle(int w)
 {
     static char pix[PAD_H * 64];
     int c, r;
-    char body = paddle_shielded ? 'c' : 'e';   /* white while the shield holds */
     for (r = 0; r < PAD_H; r++)
         for (c = 0; c < w; c++) {
-            char ch = body;
-            if (c < 4 || c >= w - 4) ch = 'a';
-            if (r == 0) ch = paddle_shielded ? 'e' : 'c';
-            if (r == PAD_H - 1) ch = 'f';
+            char ch = '5';                          /* body: shaded per scanline */
+            if (c < 4 || c >= w - 4) ch = '6';      /* end caps */
+            if (c == 4 || c == w - 5) ch = 'f';     /* groove between cap and body */
             if ((r == 0 || r == PAD_H - 1) && (c == 0 || c == w - 1)) ch = ' ';
-            if (c == 4 || c == w - 5) ch = paddle_shielded ? 'c' : 'f';
             pix[r * w + c] = ch;
         }
     paddle_w = w;
     make_sprite(&spr_paddle, pix, w, PAD_H);
+    raster_build();
 }
 
 /* Capsule letters get their own small glyph set, sized to actually fit the
@@ -541,32 +727,64 @@ static void build_sprites(void)
     int t, r, c;
     make_sprite(&spr_ball, ball_pix, 4, 4);
     make_sprite(&spr_fireball, fire_pix, 4, 4);
+    {   /* spinning ball: a band of two blue marks runs round the rim, with a
+           grey trail behind each, over a white sphere; the fireball's rim is
+           orange with white-hot marks */
+        static const u8 ring[8][2] = { {0,1}, {0,2}, {1,3}, {2,3}, {3,2}, {3,1}, {2,0}, {1,0} };
+        char bp[16], fp[16];
+        int f, k;
+        for (f = 0; f < BALL_FR; f++) {
+            for (k = 0; k < 16; k++) {
+                bp[k] = ball_pix[k] == ' ' ? ' ' : 'c';
+                fp[k] = ball_pix[k] == ' ' ? ' ' : 'c';
+            }
+            for (k = 0; k < 8; k++) fp[ring[k][0] * 4 + ring[k][1]] = 'a';
+            for (k = 0; k < 2; k++) {
+                int p0 = (f + k * 4) & 7, p1 = (f + k * 4 + 7) & 7;
+                bp[ring[p1][0] * 4 + ring[p1][1]] = 'e';
+                bp[ring[p0][0] * 4 + ring[p0][1]] = 'd';
+                fp[ring[p0][0] * 4 + ring[p0][1]] = 'c';
+            }
+            make_sprite(&spr_ballf[f], bp, 4, 4);
+            make_sprite(&spr_firef[f], fp, 4, 4);
+        }
+    }
     make_sprite(&spr_nub, nub_pix, 2, 3);
     make_sprite(&spr_bullet, bullet_pix, 2, 7);
     for (t = 0; t < PU_COUNT; t++) {
-        char body = (char)(pu_colour[t] < 10 ? '0' + pu_colour[t] : 'a' + pu_colour[t] - 10);
+        /* a rolling barrel: a lit stripe, body, and a shadow stripe scroll down
+           the 6 body rows each frame, between grey end bands and a dark
+           outline. Letters stay put. */
+        static const char roll[6] = { 'H', 'B', 'B', 'B', 'B', 'S' };
+        int pc = pu_colour[t], f;
+        char body = (char)(pc < 10 ? '0' + pc : 'a' + pc - 10);
+        char hi = pc == 12 ? 'e' : 'c';
+        char letter = (pc == 8 || pc == 12 || pc == 13 || pc == 14) ? 'f' : 'c';
         int n = pu_text[t][1] ? 2 : 1;             /* one or two characters */
-        int x0 = n == 2 ? 1 : 4;                   /* two glyphs start further left */
-        for (r = 0; r < CAP_H; r++)
-            for (c = 0; c < CAP_W; c++) {
-                char ch = body;
-                int g;
-                if ((r == 0 || r == CAP_H - 1) && (c < 2 || c > CAP_W - 3)) ch = ' ';
-                else if ((c == 0 || c == CAP_W - 1) && (r == 1 || r == CAP_H - 2)) ch = ' ';
-                else if (r == CAP_H - 1 || c == CAP_W - 1) ch = 'f';
-                else if (r == 0) ch = 'c';
-                for (g = 0; g < n; g++) {
-                    int gx = x0 + g * 6, bit = c - gx;   /* glyphs are 5 px wide */
-                    if (bit >= 0 && bit < 5 && r >= 1 && r <= 6 &&
-                        (cap_glyph_for(pu_text[t][g])[r - 1] & (0x10 >> bit)))
-                        /* dark letter on light bodies (paddle-blue or white), light
-                           letter on everything else - otherwise a white body (the
-                           exit capsule) draws its own "?" in invisible white-on-white */
-                        ch = (pu_colour[t] == 13 || pu_colour[t] == 12) ? 'f' : 'c';
+        int x0 = n == 2 ? 3 : 6;
+        for (f = 0; f < CAP_FR; f++) {
+            for (r = 0; r < CAP_H; r++)
+                for (c = 0; c < CAP_W; c++) {
+                    char ch = body, tone = roll[(r + 5 + f) % 6];
+                    int g;
+                    if (tone == 'H') ch = hi;
+                    else if (tone == 'S') ch = '7';
+                    if (c < 3 || c > CAP_W - 4) ch = tone == 'S' ? '9' : 'e';
+                    if (r == 0 || r == CAP_H - 1 || c == 0 || c == CAP_W - 1) ch = 'f';
+                    if ((r == 0 || r == CAP_H - 1) && (c == 0 || c == CAP_W - 1)) ch = ' ';
+                    if ((c == 0 || c == CAP_W - 1) && (r == 1 || r == CAP_H - 2)) ch = ' ';
+                    if ((r == 0 || r == CAP_H - 1) && (c == 1 || c == CAP_W - 2)) ch = ' ';
+                    for (g = 0; g < n; g++) {
+                        int gx = x0 + g * 6, bit = c - gx;   /* glyphs are 5 px wide */
+                        if (bit >= 0 && bit < 5 && r >= 1 && r <= 6 &&
+                            (cap_glyph_for(pu_text[t][g])[r - 1] & (0x10 >> bit)))
+                            ch = letter;
+                    }
+                    cap_pix[r * CAP_W + c] = ch;
                 }
-                cap_pix[r * CAP_W + c] = ch;
-            }
-        make_sprite(&spr_cap[t], cap_pix, CAP_W, CAP_H);
+            make_sprite(&spr_capf[t][f], cap_pix, CAP_W, CAP_H);
+            if (f == 0) make_sprite(&spr_cap[t], cap_pix, CAP_W, CAP_H);
+        }
     }
 }
 
@@ -640,7 +858,7 @@ static void load_level(int idx)
     int i, w;
     level_idx = idx;
     w = idx / 5;
-    for (i = 0; i < 8; i++) palette[1 + i] = world_pal[w][i];
+    for (i = 0; i < 8; i++) brick_rgb[i] = world_pal[w][i];
     set_palette();
     draw_walls();
     draw_panel_labels();
@@ -813,6 +1031,9 @@ static void apply_power(int t)
 {
     int i;
     pu_collected[t]++;
+#ifdef TEST
+    log_kv("CAPTEST caught type=", (u32)t); log_str("\n");
+#endif
     sfx_play(pu_sound[t]);
     switch (t) {
     case PU_MULTI: {
@@ -886,7 +1107,11 @@ static void update_caps(void)
         if (!c->active) continue;
         c->y += 192;                       /* 0.75 px/frame */
         y = (int)(c->y >> 8);
-        if (y >= 200 - CAP_H) { c->active = 0; continue; }
+        if (y >= 200 - CAP_H) {
+#ifdef TEST
+            log_kv("CAPTEST missed type=", (u32)c->type); log_kv("cx=", (u32)c->x); log_kv("px=", (u32)paddle_x); log_kv("pw=", (u32)paddle_w); log_str("\n");
+#endif
+            c->active = 0; continue; }
         if (y + CAP_H > PAD_Y && y < PAD_Y + PAD_H &&
             c->x + CAP_W > paddle_x && c->x < paddle_x + paddle_w) {
             c->active = 0;
@@ -1164,11 +1389,44 @@ static int entry_pos, entry_rank, entry_acc;
 static void show_title(void)
 {
     int i;
-    for (i = 0; i < 8; i++) palette[1 + i] = world_pal[0][i];
+    for (i = 0; i < 8; i++) brick_rgb[i] = world_pal[0][i];
     set_palette();
     fill_rect(bg, 0, 0, 320, 200, COL_DARK);
-    for (i = 0; i < 8; i++) fill_rect(bg, 24 + i * 34, 6, 32, 4, 1 + i);
-    for (i = 0; i < 8; i++) fill_rect(bg, 24 + i * 34, 190, 32, 4, 8 - i);
+    {   /* deep-space backdrop: three star brightnesses outside the text area */
+        u16 sr = 0xace1;
+        for (i = 0; i < 90; i++) {
+            int sx, sy;
+            sr = (u16)((sr >> 1) ^ (-(sr & 1) & 0xb400)); sx = 6 + sr % 308;
+            sr = (u16)((sr >> 1) ^ (-(sr & 1) & 0xb400)); sy = 6 + sr % 188;
+            if (sx > 56 && sx < 264 && sy > 20 && sy < 182) continue;
+            plot(bg, sx, sy, i % 3 == 0 ? COL_LIGHT : i % 3 == 1 ? COL_METAL : COL_SHADE);
+            if (i % 11 == 0) {
+                plot(bg, sx - 1, sy, COL_METAL); plot(bg, sx + 1, sy, COL_METAL);
+                plot(bg, sx, sy - 1, COL_METAL); plot(bg, sx, sy + 1, COL_METAL);
+                plot(bg, sx, sy, COL_WHITE);
+            }
+        }
+    }
+    /* neon double frame with bracketed corners */
+    fill_rect(bg, 2, 2, 316, 1, COL_PURPLE); fill_rect(bg, 2, 197, 316, 1, COL_PURPLE);
+    fill_rect(bg, 2, 2, 1, 196, COL_PURPLE); fill_rect(bg, 317, 2, 1, 196, COL_PURPLE);
+    fill_rect(bg, 5, 5, 310, 1, COL_PADDLE); fill_rect(bg, 5, 194, 310, 1, COL_PADDLE);
+    fill_rect(bg, 5, 5, 1, 190, COL_PADDLE); fill_rect(bg, 314, 5, 1, 190, COL_PADDLE);
+    for (i = 0; i < 2; i++) {
+        int cx = i ? 304 : 6, cy;
+        for (cy = 0; cy < 2; cy++) {
+            int yy = cy ? 184 : 6;
+            fill_rect(bg, cx, yy, 10, 2, COL_WHITE);
+            fill_rect(bg, cx + (i ? 8 : 0), yy, 2, 10, COL_WHITE);
+        }
+    }
+    for (i = 0; i < 8; i++) fill_rect(bg, 24 + i * 34, 10, 32, 2, title_col[i]);
+    for (i = 0; i < 8; i++) fill_rect(bg, 24 + i * 34, 190, 32, 2, title_col[7 - i]);
+    /* lines under the title, tapering like a lens flare */
+    fill_rect(bg, 60, 52, 200, 1, COL_PADDLE);
+    fill_rect(bg, 90, 54, 140, 1, COL_PURPLE);
+    fill_rect(bg, 130, 56, 60, 1, COL_SHADE);
+    fill_rect(bg, 158, 51, 4, 3, COL_WHITE);
     draw_text_2x(104, 26, "QUANOID", COL_EXPL);
     draw_text(bg, 116, 66, "HIGH SCORES", COL_WHITE, COL_DARK);
     for (i = 0; i < NUM_HI; i++) {
@@ -1176,7 +1434,7 @@ static void show_title(void)
         static char rank[4] = "1.";
         rank[0] = (char)('1' + i);
         draw_text(bg, 92, 82 + i * 12, rank, COL_LIGHT, COL_DARK);
-        draw_text(bg, 116, 82 + i * 12, hiscores[i].name, 1 + i, COL_DARK);
+        draw_text(bg, 116, 82 + i * 12, hiscores[i].name, title_col[i], COL_DARK);
         while (b + 11 - n < 8) *--n = '0';
         draw_text(bg, 164, 82 + i * 12, n, COL_WHITE, COL_DARK);
     }
@@ -1443,9 +1701,17 @@ int main(void)
     { static u32 * volatile hz200 = (u32 *)0x4ba; rng = (u16)*hz200 | 1; }
 
     palette[COL_BG] = 0x002;
+    palette[COL_BRICK] = 0x444;
+    palette[COL_RED] = 0x610;
+    palette[COL_GREEN] = 0x151;
+    palette[COL_PURPLE] = 0x537;
+    palette[COL_PADBODY] = 0x356;
+    palette[COL_PADCAP] = 0x610;
+    palette[COL_SHADE] = 0x224;
+    palette[COL_GOLD] = 0x760;
     palette[COL_METAL] = 0x333;
-    palette[COL_EXPL] = COL_EXPL_RGB;
-    palette[COL_CRACK] = COL_CRACK_RGB;
+    palette[COL_EXPL] = 0x720;
+    palette[COL_CRACK] = 0x411;
     palette[COL_WHITE] = 0x777;
     palette[COL_PADDLE] = 0x367;     /* light blue, used by the sphere enemies */
     palette[COL_LIGHT] = 0x555;
@@ -1467,6 +1733,7 @@ int main(void)
     ikbd_install();
     timer_install();
     vbl_install();
+    raster_install();
 
 #ifndef NOSOUND
     sfx_init();
@@ -1547,6 +1814,16 @@ int main(void)
                 if (t) dx = (int)(t->x >> 8) + 2 - paddle_w / 2 + aim - paddle_x;
             } else if (state == ST_PLAY) {
                 dx = (frame_no & 64) ? 2 : -2;
+            }
+            if (state == ST_PLAY) {            /* feed and chase a capsule of each type */
+                int k, bi = 0;
+                for (k = 0; k < MAX_BALLS; k++) if (balls[k].active && balls[k].y > balls[bi].y) bi = k;
+                if ((frame_no % 300) == 100) {
+                    spawn_cap(PF_X + 20 + (int)(rnd() % (PF_X2 - PF_X - 40)), BR_Y + 60, (frame_no / 300) % 8, -1);
+                    log_kv("CAPTEST spawn type=", (u32)((frame_no / 300) % 8)); log_str("\n");
+                }
+                for (k = 0; k < MAX_CAPS; k++)
+                    if (caps[k].active && (int)(caps[k].y >> 8) > 90 && (balls[bi].vy < 0 || (int)(balls[bi].y >> 8) < 120)) dx = caps[k].x + CAP_W / 2 - paddle_w / 2 - paddle_x;
             }
             if ((frame_no & 31) == 0) fire_edge = 1;
             if (state == ST_PLAY && frame_no == 1200) key_esc = 1;
@@ -1877,10 +2154,11 @@ int main(void)
         }
         ndirty[back] = 0;
         if (state == ST_PLAY || state == ST_OVER) {
+            draw_stars(buf);
             for (i = 0; i < MAX_CAPS; i++) {
                 Cap *c = &caps[i];
                 if (!c->active) continue;
-                blit_ps(buf, c->x, (int)(c->y >> 8), &ps_cap[c->type]);
+                blit(buf, c->x, (int)(c->y >> 8), &spr_capf[c->type][((int)(c->y >> 9)) % CAP_FR]);
                 add_dirty(back, c->x, (int)(c->y >> 8), CAP_W, CAP_H);
             }
             for (i = 0; i < MAX_BULLETS; i++) {
@@ -1925,7 +2203,11 @@ int main(void)
                     Ball *b = &balls[i];
                     int bx = (int)(b->x >> 8), by = (int)(b->y >> 8);
                     if (!b->active || by >= 200 - BALL_S) continue;
-                    blit_ps(buf, bx, by, fireball_timer ? &ps_fireball : &ps_ball);
+                    {
+                        int ph = ((frame_no >> 1) + i * 3) & 7;
+                        if (b->vx < 0) ph = 7 - ph;
+                        blit_ps(buf, bx, by, fireball_timer ? &ps_firef[ph] : &ps_ballf[ph]);
+                    }
                     add_dirty(back, bx, by, BALL_S, BALL_S);
 #ifdef PIXCHECK
                     {   /* read back a pixel that must be white after the blit */
@@ -2030,6 +2312,8 @@ shutdown:
         ikbdws(1, ikbd_off);
     }
 #ifndef EXIT_NORESTORE
+    raster_tab = 0;
+    raster_remove();
     vbl_remove2();
     timer_remove();
     ikbd_remove();

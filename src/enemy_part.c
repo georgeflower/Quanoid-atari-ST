@@ -8,7 +8,7 @@
  */
 
 #define MAX_ENEMIES 3
-#define ENEMY_SIZE 8
+#define ENEMY_SIZE 12
 #ifndef ENEMY_COL
 #define ENEMY_COL COL_WHITE
 #endif
@@ -223,104 +223,36 @@ static int enemy_bullet_hit(int bx, int by)
     return 0;
 }
 
-/* 8x8 sprites, two animation frames each: a blit is both cheaper than a dozen
-   vector lines and correct over bricks, which a single-plane wireframe is not */
-/* colour per type; the pyramid also shows damage:
-   3 hits grey, 2 hits white, last hit light red and blinking */
-static Sprite spr_enemy[5][2][3];
-static const char enemy_col[5][3] = {
-    { 'a', 'a', 'a' },        /* cube: red */
-    { 'd', 'd', 'd' },        /* sphere: light blue */
-    { 'e', 'c', 'a' },        /* pyramid: grey, white, red (blinks on the last hit) */
-    { 'c', 'c', 'c' },        /* unused */
-    { 'b', 'b', 'b' }         /* star: gold */
+/* 12x12 shaded, dithered rotation sprites (gfx_enemy in sprites.h, 8 frames
+   per shape). Tones are outline, shadow, body, highlight; the table maps
+   them to palette entries: cube red, sphere light blue, pyramid purple
+   (3 hits purple, 2 hits grey, last hit red and blinking), star gold. */
+static Sprite spr_enemy[5][8][3];
+static const char enemy_tone[5][3][4] = {
+    { {'f','b','2','a'}, {'f','b','2','a'}, {'f','b','2','a'} },   /* cube */
+    { {'f','7','d','c'}, {'f','7','d','c'}, {'f','7','d','c'} },   /* sphere */
+    { {'f','7','4','c'}, {'f','9','e','c'}, {'f','b','2','a'} },   /* pyramid */
+    { {0} , {0}, {0} },                                            /* unused */
+    { {'f','a','8','c'}, {'f','a','8','c'}, {'f','a','8','c'} }    /* star */
 };
 
 static void build_enemy_sprites(void)
 {
-    static const char shapes[5][2][64] = {
-    {   /* cube */
-      { ' ','c','c','c','c','c','c',' ',
-        'c',' ',' ',' ',' ',' ',' ','c',
-        'c',' ','c','c','c','c',' ','c',
-        'c',' ','c',' ',' ','c',' ','c',
-        'c',' ','c',' ',' ','c',' ','c',
-        'c',' ','c','c','c','c',' ','c',
-        'c',' ',' ',' ',' ',' ',' ','c',
-        ' ','c','c','c','c','c','c',' ' },
-      { ' ',' ','c','c','c','c',' ',' ',
-        ' ','c',' ',' ',' ',' ','c',' ',
-        'c',' ',' ','c','c',' ',' ','c',
-        'c',' ','c',' ',' ','c',' ','c',
-        'c',' ','c',' ',' ','c',' ','c',
-        'c',' ',' ','c','c',' ',' ','c',
-        ' ','c',' ',' ',' ',' ','c',' ',
-        ' ',' ','c','c','c','c',' ',' ' } },
-    {   /* sphere */
-      { ' ',' ','c','c','c','c',' ',' ',
-        ' ','c',' ',' ',' ',' ','c',' ',
-        'c',' ',' ','c','c',' ',' ','c',
-        'c',' ','c',' ',' ','c',' ','c',
-        'c',' ','c',' ',' ','c',' ','c',
-        'c',' ',' ','c','c',' ',' ','c',
-        ' ','c',' ',' ',' ',' ','c',' ',
-        ' ',' ','c','c','c','c',' ',' ' },
-      { ' ',' ','c','c','c','c',' ',' ',
-        ' ','c',' ',' ',' ',' ','c',' ',
-        'c',' ','c',' ',' ','c',' ','c',
-        'c','c',' ',' ',' ',' ','c','c',
-        'c','c',' ',' ',' ',' ','c','c',
-        'c',' ','c',' ',' ','c',' ','c',
-        ' ','c',' ',' ',' ',' ','c',' ',
-        ' ',' ','c','c','c','c',' ',' ' } },
-    {   /* pyramid */
-      { ' ',' ',' ','c','c',' ',' ',' ',
-        ' ',' ','c','c','c','c',' ',' ',
-        ' ',' ','c',' ',' ','c',' ',' ',
-        ' ','c',' ',' ',' ',' ','c',' ',
-        ' ','c',' ',' ',' ',' ','c',' ',
-        'c',' ',' ',' ',' ',' ',' ','c',
-        'c',' ',' ',' ',' ',' ',' ','c',
-        'c','c','c','c','c','c','c','c' },
-      { ' ',' ',' ','c','c',' ',' ',' ',
-        ' ',' ','c',' ',' ','c',' ',' ',
-        ' ',' ','c',' ',' ','c',' ',' ',
-        ' ','c',' ','c','c',' ','c',' ',
-        ' ','c',' ','c','c',' ','c',' ',
-        'c',' ',' ','c','c',' ',' ','c',
-        'c',' ',' ','c','c',' ',' ','c',
-        'c','c','c','c','c','c','c','c' } },
-    {   /* unused (hexagon) */
-      { 0 }, { 0 } },
-    {   /* star */
-      { ' ',' ',' ','c','c',' ',' ',' ',
-        'c',' ',' ','c','c',' ',' ','c',
-        ' ','c',' ','c','c',' ','c',' ',
-        ' ',' ','c','c','c','c',' ',' ',
-        'c','c','c','c','c','c','c','c',
-        ' ',' ','c','c','c','c',' ',' ',
-        ' ','c',' ','c','c',' ','c',' ',
-        'c',' ',' ','c','c',' ',' ','c' },
-      { ' ',' ','c',' ',' ','c',' ',' ',
-        ' ','c',' ','c','c',' ','c',' ',
-        'c',' ',' ','c','c',' ',' ','c',
-        ' ','c','c','c','c','c','c',' ',
-        ' ','c','c','c','c','c','c',' ',
-        'c',' ',' ','c','c',' ',' ','c',
-        ' ','c',' ','c','c',' ','c',' ',
-        ' ',' ','c',' ',' ','c',' ',' ' } }
-    };
     int t, f, i, v;
-    static char pix[64];
-    for (t = 0; t < 5; t++)
-        for (f = 0; f < 2; f++)
+    static char pix[144];
+    build_boss_sprites();
+    for (t = 0; t < 5; t++) {
+        int g = t == 4 ? 3 : t;
+        if (t == 3) continue;
+        for (f = 0; f < 8; f++)
             for (v = 0; v < 3; v++) {
-                for (i = 0; i < 64; i++) {
-                    char c = shapes[t][f][i];
-                    pix[i] = c && c != ' ' ? enemy_col[t][v] : ' ';
+                for (i = 0; i < 144; i++) {
+                    char c = gfx_enemy[g][f][i / 12][i % 12];
+                    pix[i] = c >= '0' && c <= '3' ? enemy_tone[t][v][c - '0'] : ' ';
                 }
-                make_sprite(&spr_enemy[t][f][v], pix, 8, 8);
+                make_sprite(&spr_enemy[t][f][v], pix, 12, 12);
             }
+    }
 }
 
 /* ---- pre-shifted blit tables: ball, fireball and every enemy sprite ----
@@ -332,7 +264,7 @@ typedef struct { const u16 *data; u8 h; } PreShift;
 
 /* ball(2x1280w)+enemy(30 variants x1280w)+capsule(9 types x1280w) = 51200
    words exactly; a margin is kept in case a future sprite is added here. */
-static u16 pre_pool[54000];
+static u16 pre_pool[12000];
 static int pre_used;
 
 static void build_preshift(PreShift *ps, const Sprite *src)
@@ -361,18 +293,17 @@ static void build_preshift(PreShift *ps, const Sprite *src)
     }
 }
 
-static PreShift ps_ball, ps_fireball, ps_enemy[5][2][3], ps_cap[PU_COUNT];
+static PreShift ps_ballf[BALL_FR], ps_firef[BALL_FR], ps_ball, ps_fireball, ps_enemy[5][2][3] __attribute__((unused)), ps_cap[PU_COUNT] __attribute__((unused));
 
 static void build_all_preshift(void)
 {
-    int t, f, v;
+    int t;
     build_preshift(&ps_ball, &spr_ball);
     build_preshift(&ps_fireball, &spr_fireball);
-    for (t = 0; t < 5; t++)
-        for (f = 0; f < 2; f++)
-            for (v = 0; v < 3; v++)
-                if (spr_enemy[t][f][v].d) build_preshift(&ps_enemy[t][f][v], &spr_enemy[t][f][v]);
-    for (t = 0; t < PU_COUNT; t++) build_preshift(&ps_cap[t], &spr_cap[t]);
+    for (t = 0; t < BALL_FR; t++) {
+        build_preshift(&ps_ballf[t], &spr_ballf[t]);
+        build_preshift(&ps_firef[t], &spr_firef[t]);
+    }
 }
 
 /* draw a pre-shifted sprite: same position semantics as blit() */
@@ -401,7 +332,7 @@ static void enemies_draw(u8 *buf)
         {   /* damage state: 3 hits -> 0, 2 -> 1, last hit -> 2 (blinks) */
             int v = e->hits >= 3 ? 0 : e->hits == 2 ? 1 : 2;
             if (v == 2 && e->shape == 2 && (frame_no & 8)) v = 1;   /* blink */
-            blit_ps(buf, x, y, &ps_enemy[e->shape][(e->angle >> 3) & 1][v]);
+            blit(buf, x, y, &spr_enemy[e->shape][(e->angle >> 2) & 7][v]);
         }
         add_dirty(back, x, y, ENEMY_SIZE, ENEMY_SIZE);
     }

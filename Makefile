@@ -14,12 +14,15 @@ src/main.c: src/main_head.c src/game_part.c src/boss_part.c tools/assemble.py
 src/levels.h: tools/levels.txt tools/genlevels.py
 	python3 tools/genlevels.py $< $@
 
+src/sprites.h: tools/gensprites.py
+	python3 tools/gensprites.py $@
+
 build/%.o: src/%.S
 	$(CC) -m68000 -c $< -o $@
 
-build/main.o: src/main.c src/levels.h src/font.h src/sfx.h
+build/main.o: src/main.c src/levels.h src/sprites.h src/font.h src/sfx.h
 	$(CC) $(CFLAGS) -c $< -o $@
-build/main_test.o: src/main.c src/levels.h src/font.h src/sfx.h
+build/main_test.o: src/main.c src/levels.h src/sprites.h src/font.h src/sfx.h
 	$(CC) $(CFLAGS) -DTEST -c $< -o $@
 
 build/%.elf: $(OBJS) build/%.o src/link.ld
@@ -38,7 +41,7 @@ clean:
 src/font.h: tools/genfont.py
 	python3 tools/genfont.py $@
 
-build/main_diag.o: src/main.c src/levels.h src/font.h
+build/main_diag.o: src/main.c src/levels.h src/sprites.h src/font.h
 	$(CC) $(CFLAGS) -DDIAG -c $< -o $@
 build/QUANDIAG.PRG: build/main_diag.elf
 	python3 tools/elf2prg.py $< $@
@@ -46,43 +49,43 @@ build/QUANDIAG.PRG: build/main_diag.elf
 src/sfx.h: tools/gensfx.py
 	python3 tools/gensfx.py $@
 
-build/main_sfxdemo.o: src/main.c src/levels.h src/font.h src/sfx.h
+build/main_sfxdemo.o: src/main.c src/levels.h src/sprites.h src/font.h src/sfx.h
 	$(CC) $(CFLAGS) -DSFXDEMO -c $< -o $@
 build/QSFXDEMO.PRG: build/main_sfxdemo.elf
 	sh tools/checkalign.sh $<
 	python3 tools/elf2prg.py $< $@
 
-build/main_nosound.o: src/main.c src/levels.h src/font.h src/sfx.h
+build/main_nosound.o: src/main.c src/levels.h src/sprites.h src/font.h src/sfx.h
 	$(CC) $(CFLAGS) -DNOSOUND -c $< -o $@
 build/QUANNS.PRG: build/main_nosound.elf
 	sh tools/checkalign.sh $<
 	python3 tools/elf2prg.py $< $@
 
-build/main_snddiag.o: src/main.c src/levels.h src/font.h src/sfx.h
+build/main_snddiag.o: src/main.c src/levels.h src/sprites.h src/font.h src/sfx.h
 	$(CC) $(CFLAGS) -DSNDDIAG -c $< -o $@
 build/QSNDDG.PRG: build/main_snddiag.elf
 	sh tools/checkalign.sh $<
 	python3 tools/elf2prg.py $< $@
 
-build/main_qexita.o: src/main.c src/levels.h src/font.h src/sfx.h
+build/main_qexita.o: src/main.c src/levels.h src/sprites.h src/font.h src/sfx.h
 	$(CC) $(CFLAGS) -DEXIT_NORESTORE -c $< -o $@
 build/QEXITA.PRG: build/main_qexita.elf
 	sh tools/checkalign.sh $<
 	python3 tools/elf2prg.py $< $@
 
-build/main_qexitb.o: src/main.c src/levels.h src/font.h src/sfx.h
+build/main_qexitb.o: src/main.c src/levels.h src/sprites.h src/font.h src/sfx.h
 	$(CC) $(CFLAGS) -DEXIT_NOTERM -c $< -o $@
 build/QEXITB.PRG: build/main_qexitb.elf
 	sh tools/checkalign.sh $<
 	python3 tools/elf2prg.py $< $@
 
-build/main_dosound.o: src/main.c src/levels.h src/font.h src/sfx.h
+build/main_dosound.o: src/main.c src/levels.h src/sprites.h src/font.h src/sfx.h
 	$(CC) $(CFLAGS) -DDOSOUND -c $< -o $@
 build/QDOSND.PRG: build/main_dosound.elf
 	sh tools/checkalign.sh $<
 	python3 tools/elf2prg.py $< $@
 
-build/main_microbench.o: src/main.c src/levels.h src/font.h src/sfx.h
+build/main_microbench.o: src/main.c src/levels.h src/sprites.h src/font.h src/sfx.h
 	$(CC) $(CFLAGS) -DTEST -DMICROBENCH -c $< -o $@
 build/QMICRO.PRG: build/main_microbench.elf
 	sh tools/checkalign.sh $<

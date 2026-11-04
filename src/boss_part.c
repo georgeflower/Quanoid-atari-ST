@@ -11,10 +11,35 @@
 /* Boss levels have no bricks, so the brick palette entries are free: the
    wireframe uses one plane (colour 8) and the attacks another (colour 2),
    which halves the cost of every pixel. Flashes recolour the palette. */
+/* legacy wireframe renderer, unused now */
 #define BOSS_PLANE 3
 #define BOSS_PLANE_COL 8
 #define BOSS_SHOT_COL 2
-#define BOSS_CROSS_COL 4
+#define BOSS_CROSS_COL COL_EXPL
+
+/* 28x28 shaded rotation sprites (gfx_boss in sprites.h, 16 frames per shape).
+   A flash recolours the body entry of the boss's shape. */
+#define BOSS_SPR 28
+static Sprite spr_boss[4][16];
+static const char boss_tone[4][4] = {
+    {'f','b','2','a'}, {'f','7','d','c'}, {'f','7','4','c'}, {'f','a','8','c'}
+};
+static const u8 boss_body_col[4] = { 2, 13, 4, 8 };
+static const u16 boss_body_rgb[4] = { 0x610, 0x367, 0x537, 0x760 };
+
+static void build_boss_sprites(void)
+{
+    static char pix[BOSS_SPR * BOSS_SPR];
+    int t, f, i;
+    for (t = 0; t < 4; t++)
+        for (f = 0; f < 16; f++) {
+            for (i = 0; i < BOSS_SPR * BOSS_SPR; i++) {
+                char c = gfx_boss[t][f][i / BOSS_SPR][i % BOSS_SPR];
+                pix[i] = c >= '0' && c <= '3' ? boss_tone[t][c - '0'] : ' ';
+            }
+            make_sprite(&spr_boss[t][f], pix, BOSS_SPR, BOSS_SPR);
+        }
+}
 
 enum { A_SHOT, A_LASER, A_SUPER, A_SPIRAL, A_CROSS, A_COUNT };
 
@@ -174,7 +199,7 @@ static void line(u8 *buf, int x0, int y0, int x1, int y1, int col)
     else line_asm(buf, x0, y0, x1, y1, col);
 }
 
-static void draw_shape(u8 *buf, int cx, int cy, int scale, int shape, int ang, int ang2, int col)
+__attribute__((unused)) static void draw_shape(u8 *buf, int cx, int cy, int scale, int shape, int ang, int ang2, int col)
 {
     const signed char (*vp)[3];
     const u8 (*ep)[2];
@@ -278,9 +303,6 @@ static void boss_start(int level)
     boss_res_left = idx == 2 ? 3 : 0;      /* pyramid resurrections */
     boss_active = 1;
     boss_dead_timer = 0;
-    palette[BOSS_PLANE_COL] = 0x777;
-    palette[BOSS_SHOT_COL] = 0x700;
-    palette[BOSS_CROSS_COL] = 0x750;
     set_palette();
     boss_x = (s32)(PF_X + (PF_X2 - PF_X - bd->w) / 2) << 8;
     boss_y = (s32)(PF_Y + 20) << 8;
@@ -468,18 +490,23 @@ static int boss_ball_hit(Ball *b)
 static void boss_draw(u8 *buf)
 {
     int bx = boss_x >> 8, by = boss_y >> 8, y;
-    int col = BOSS_PLANE_COL;
+    int sx, sy;
     int i;
     if (!boss_active) return;
     {   /* flashes are palette changes, not colour changes */
-        u16 c = boss_phase == 0 ? 0x777 : boss_phase == 1 ? 0x766 : 0x755;
-        if (boss_flash) c = 0x700;
+        u16 c = boss_body_rgb[boss_shape];
+        if (boss_flash) c = 0x777;
         if (boss_dead_timer) c = (boss_dead_timer & 4) ? 0x700 : 0x777;
         else if (boss_warn && (frame_no & 2)) c = 0x740;
-        ((u16 *)0xff8240)[BOSS_PLANE_COL] = c;
+        ((u16 *)0xff8240)[boss_body_col[boss_shape]] = c;
     }
-    draw_shape(buf, bx + bd->w / 2, by + bd->h / 2, bd->w, boss_shape, boss_angle, boss_angle2, col);
-    add_dirty(back, wf_x0 - 1, wf_y0 - 1, wf_x1 - wf_x0 + 3, wf_y1 - wf_y0 + 3);
+    sx = bx + bd->w / 2 - BOSS_SPR / 2;
+    sy = by + bd->h / 2 - BOSS_SPR / 2;
+    if (sx < PF_X) sx = PF_X;
+    if (sx > PF_X2 - BOSS_SPR) sx = PF_X2 - BOSS_SPR;
+    if (sy < PF_Y) sy = PF_Y;
+    blit(buf, sx, sy, &spr_boss[boss_shape][(boss_angle >> 2) & 15]);
+    add_dirty(back, sx, sy, BOSS_SPR, BOSS_SPR);
 
     if (laser_warn) {                            /* warning: dotted beam */
         for (y = by + bd->h; y < 200; y += 4) pset(buf, laser_x, y, BOSS_SHOT_COL);
