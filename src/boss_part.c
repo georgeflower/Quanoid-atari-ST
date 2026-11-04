@@ -148,18 +148,8 @@ static void build_sphere(void)
 /* The boss area is restored from the background (colour 0) every frame, so the
    wireframe only needs to OR its colour bits in - no read-modify-write of the
    other planes, which is what made this too slow for 50 Hz. */
-static inline void pset(u8 *buf, int x, int y, int col)
-{
-    u16 *p;
-    u16 m;
-    if (x < PF_X || x >= PF_X2 || y < PF_Y || y >= 200) return;
-    p = (u16 *)(buf + y * 160) + (x >> 4) * 4;
-    m = (u16)(0x8000 >> (x & 15));
-    if (col & 1) p[0] |= m;
-    if (col & 2) p[1] |= m;
-    if (col & 4) p[2] |= m;
-    if (col & 8) p[3] |= m;
-}
+void pset_or(u8 *buf, int x, int y, int col);   /* gfx3.S */
+#define pset pset_or
 
 /* Bresenham that walks the bitplane pointer directly. When the whole line is
    inside the playfield it skips the per-pixel clipping entirely. */
@@ -230,27 +220,8 @@ __attribute__((unused)) static void draw_shape(u8 *buf, int cx, int cy, int scal
         line(buf, px[ep[i][0]], py[ep[i][0]], px[ep[i][1]], py[ep[i][1]], col);
 }
 
-/* projectiles sit on restored background, so OR-only filling is enough */
-static void box_or(u8 *buf, int x, int y, int w, int col)
-{
-    int x2, gx, ge, g, yy;
-    if (x < PF_X || x + w > PF_X2 || y < PF_Y || y + w > 200) return;   /* never write outside */
-    x2 = x + w - 1; gx = x >> 4; ge = x2 >> 4;
-    u16 mf = (u16)(0xffff >> (x & 15));
-    u16 ml = (u16)(0xffff << (15 - (x2 & 15)));
-    for (yy = y; yy < y + w; yy++) {
-        u16 *row = (u16 *)(buf + yy * 160);
-        for (g = gx; g <= ge; g++) {
-            u16 m = 0xffff, *p = row + g * 4;
-            if (g == gx) m &= mf;
-            if (g == ge) m &= ml;
-            if (col & 1) p[0] |= m;
-            if (col & 2) p[1] |= m;
-            if (col & 4) p[2] |= m;
-            if (col & 8) p[3] |= m;
-        }
-    }
-}
+/* projectiles sit on restored background, so OR-only filling is enough (gfx3.S) */
+void box_or(u8 *buf, int x, int y, int w, int col);
 
 static int boss_free_shot(void)
 {

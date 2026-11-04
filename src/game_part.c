@@ -504,29 +504,14 @@ static void draw_panel_labels(void)
    pixel every 8-24 frames); a step touches both buffers' dirty lists once.
    Stars only appear where the background is empty. */
 #define NSTARS 12
-static u8 star_x[NSTARS];
-static s16 star_y[NSTARS];            /* where each star is painted, -1 = nowhere */
-static const u8 star_period[3] = { 24, 12, 8 };
-static const u8 star_col[3] = { COL_SHADE, COL_METAL, COL_LIGHT };
+u8 star_x[NSTARS];                    /* star_* are shared with gfx3.S */
+s16 star_y[NSTARS];            /* where each star is painted, -1 = nowhere */
+const u8 star_period[3] = { 24, 12, 8 };
+const u8 star_col[3] = { COL_SHADE, COL_METAL, COL_LIGHT };
 
-static int bg_get(int x, int y)
-{
-    u16 *p = (u16 *)(bg + y * 160) + (x >> 4) * 4;
-    u16 m = (u16)(0x8000 >> (x & 15));
-    return (p[0] & m ? 1 : 0) | (p[1] & m ? 2 : 0) | (p[2] & m ? 4 : 0) | (p[3] & m ? 8 : 0);
-}
-
-static void bg_put(int x, int y, int col)
-{
-    u16 *p = (u16 *)(bg + y * 160) + (x >> 4) * 4;
-    u16 m = (u16)(0x8000 >> (x & 15));
-    int k;
-    for (k = 0; k < 4; k++) {
-        if (col & (1 << k)) p[k] |= m; else p[k] &= (u16)~m;
-    }
-}
-
-static u8 star_cnt[NSTARS];
+u8 star_cnt[NSTARS];
+s16 star_y0[NSTARS];
+void stars_step(void);
 
 static void stars_reset(void)
 {
@@ -542,26 +527,9 @@ static void stars_reset(void)
    star per frame once cost half the frame budget */
 static void stars_update(void)
 {
-    static int y0[NSTARS];
-    int i, l = 0;
-    if (star_y[0] < 0 && !y0[0]) for (i = 0; i < NSTARS; i++) y0[i] = PF_Y + i * 9;
-    for (i = 0; i < NSTARS; i++) {
-        int x = star_x[i], y, ll = l;
-        if (++l == 3) l = 0;
-        if (star_y[i] >= 0 && ++star_cnt[i] < star_period[ll]) continue;
-        star_cnt[i] = 0;
-        y = star_y[i] >= 0 ? star_y[i] + 1 : y0[i];
-        if (y >= PF_Y + 190) y = PF_Y;
-        if (star_y[i] >= 0 && bg_get(x, star_y[i]) == star_col[ll]) {
-            bg_put(x, star_y[i], COL_BG);
-            dirty_both(x, star_y[i], 1, 1);
-        }
-        star_y[i] = (s16)y;
-        if (bg_get(x, y) == COL_BG) {
-            bg_put(x, y, star_col[ll]);
-            dirty_both(x, y, 1, 1);
-        }
-    }
+    int i;
+    if (star_y[0] < 0 && !star_y0[0]) for (i = 0; i < NSTARS; i++) star_y0[i] = (s16)(PF_Y + i * 9);
+    stars_step();
 }
 
 /* hull plating of a starship: dark edge, lit rim, three rows of panel, a
@@ -1274,6 +1242,7 @@ void enemy_hurt(int i);
 /* the constants hard-coded in gfx2.S */
 _Static_assert(PF_X == 8 && PF_X2 == 216 && PF_Y == 8 && BR_Y == 16, "gfx2.S playfield");
 _Static_assert(BCOLS == 13 && BROWS == 14 && BALL_S == 4, "gfx2.S bricks");
+_Static_assert(NSTARS == 12 && PF_Y + 190 == 198, "gfx3.S stars");
 _Static_assert(PAD_Y == 184 && BARRIER_Y == 196 && MAX_DIRTY == 96, "gfx2.S layout");
 _Static_assert(sizeof(dirty[0]) == 96 * 8, "gfx2.S dirty list");
 _Static_assert(MAX_ENEMIES == 3 && ENEMY_SIZE == 12, "gfx2.S enemies");

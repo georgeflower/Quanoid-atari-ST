@@ -145,7 +145,7 @@ static void log_kv(const char *k, u32 v)
 
 /* ---- screen buffers ---- */
 static u8 *scr[2];
-static u8 *bg;
+u8 *bg;
 static int back = 1;
 static u16 palette[16];
 static u16 old_palette[16];
