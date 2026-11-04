@@ -218,12 +218,13 @@ key_buf:	.ds.b	16
 	.text
 | ---- our own vertical blank counter --------------------------------
 | Chained to TOS's handler so nothing of TOS's own VBL work is skipped.
-| The page flip waits on this, so it always happens during the blank.
-	.globl	vbl_install, vbl_remove2, vbl_count
+| A pending page is installed here before its flip is acknowledged.
+	.globl	vbl_install, vbl_remove2, vbl_count, pending_screen
 vbl_install:
 	move.w	%sr,-(%sp)
 	move.w	#0x2700,%sr
 	clr.l	vbl_count
+	clr.l	pending_screen
 	move.l	0x70.w,old_vbl
 	move.l	#vbl_isr,0x70.w
 	move.w	(%sp)+,%sr
@@ -250,14 +251,27 @@ vbl_remove2:
 	.endm
 
 vbl_isr:
-	addq.l	#1,vbl_count
+	movem.l	%d0/%a0,-(%sp)
+	move.l	pending_screen,%d0
+	beq.s	0f
+	lsr.l	#8,%d0
+	move.b	%d0,0xffff8203.w
+	lsr.l	#8,%d0
+	move.b	%d0,0xffff8201.w
+	clr.l	pending_screen
+0:	addq.l	#1,vbl_count
 	tst.l	raster_tab
 	beq.s	1f
-	movem.l	%d0/%a0,-(%sp)
+	move.w	%sr,-(%sp)
+	ori.w	#0x0700,%sr
+	clr.b	0xfffffa1b.w
+	bclr	#0,0xfffffa0b.w		| discard any late band from the old frame
 	move.l	raster_tab,%a0
+	move.l	%a0,raster_live
 	rast_apply
-	movem.l	(%sp)+,%d0/%a0
-1:	move.l	old_vbl,-(%sp)		| chain to TOS's VBL handler
+	move.w	(%sp)+,%sr
+1:	movem.l	(%sp)+,%d0/%a0
+	move.l	old_vbl,-(%sp)		| chain to TOS's VBL handler
 	rts
 
 | ---- raster palette: Timer B (HBL event count) re-programs palette
@@ -265,7 +279,7 @@ vbl_isr:
 | than 16 colours per frame. raster_tab points at 12-byte entries
 | { c5, c6, c1, c0, lines, pad }; the entry applies for 'lines' scanlines,
 | and lines == 0 ends the list.
-	.globl	raster_install, raster_remove, raster_tab
+	.globl	raster_install, raster_remove, raster_tab, raster_live
 raster_install:
 	move.w	%sr,-(%sp)
 	move.w	#0x2700,%sr
@@ -308,6 +322,8 @@ tb_isr:
 	.bss
 old_vbl:	.ds.l	1
 vbl_count:	.ds.l	1
+pending_screen:	.ds.l	1
 old_tb:		.ds.l	1
 raster_ptr:	.ds.l	1
 raster_tab:	.ds.l	1
+raster_live:	.ds.l	1

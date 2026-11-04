@@ -469,7 +469,7 @@ static void draw_power_hud(void)
     }
 }
 
-/* inset frame, filled with the raster sky gradient */
+/* inset frame on the black space background */
 static void draw_box(int x, int y, int w, int h)
 {
     fill_rect(bg, x, y, w, h, COL_BG);
@@ -589,17 +589,17 @@ static int paddle_shielded;
 static u32 ball_bad, draw_on_visible, late_flip;
 #endif
 
-/* ---- raster palette (see raster_* in ikbd.S): colours 0, 1, 5 and 6 are
-   reprogrammed between scanline bands, which is what gives this game far
-   more than 16 colours on screen. Colour 0 is a sky gradient behind
-   everything; colour 1 is the brick body, shaded in four 2-line steps per
-   brick row and tinted by the row's world colour; colours 5 and 6 carry a
+/* ---- raster palette (see raster_* in ikbd.S): colours 1, 5 and 6 are
+   reprogrammed between scanline bands. Colour 0 stays black, including in
+   the hardware border; colour 1 is the brick body, shaded top to bottom
+   and tinted by the row's world colour; colours 5 and 6 carry a
    different shade on each of the paddle's six scanlines. Nothing else may
    use colours 1, 5 or 6. Values are 4-bit RGB: the STE shows all 16 levels,
    a plain ST drops the low bit. ---- */
 #define RAST_N 128
 extern volatile unsigned long raster_tab;
-static u16 raster_ent[RAST_N][6];     /* c5, c6, c1, c0, lines, pad */
+extern volatile unsigned long raster_live;
+static u16 raster_tables[3][RAST_N][6]; /* c5, c6, c1, c0, lines, pad */
 static u16 brick_rgb[8];
 static const u8 title_col[8] = { 2, 3, 4, 8, 13, 10, 12, 14 };              /* the current world's row colours */
 
@@ -616,18 +616,6 @@ static u16 hw4(int r, int g, int b)
 {
     return (u16)((((r & 1) << 3 | r >> 1) << 8) | (((g & 1) << 3 | g >> 1) << 4) |
                  ((b & 1) << 3 | b >> 1));
-}
-
-static u16 bg_at(int y)
-{
-    int r = ((palette[0] >> 8) & 7) * 2;
-    int g = ((palette[0] >> 4) & 7) * 2 + y * 2 / 200;
-    int b = (palette[0] & 7) * 2 + y * 5 / 200;
-    if (r > 15) r = 15;
-    if (g > 15) g = 15;
-    if (b > 15) b = 15;
-    if (b < 0) b = 0;
-    return hw4(r, g, b);
 }
 
 /* one brick row, shaded top to bottom: lit, body, shadow */
@@ -656,11 +644,19 @@ static int row_used(int r)
    (3-bit) still only takes the interrupts its bands need */
 static void raster_build(void)
 {
-    int n = 0, y;
+    int n = 0, y, table;
+    unsigned long live = raster_live, queued = raster_tab;
+    u16 (*raster_ent)[6];
     u16 *e;
+    /* A third table lets consecutive rebuilds finish without touching either
+       the table being scanned or the one queued for the next VBL. */
+    for (table = 0; table < 3; table++)
+        if ((unsigned long)raster_tables[table] != live &&
+            (unsigned long)raster_tables[table] != queued) break;
+    raster_ent = raster_tables[table];
     for (y = 0; y < 200; y++) {
         u16 c5 = palette[COL_PADBODY], c6 = palette[COL_PADCAP], c1 = palette[COL_BRICK];
-        u16 c0 = bg_at(y & ~15);
+        u16 c0 = 0;
         int by = y - BR_Y, r = y - PAD_Y;
         if (by >= 0 && by < BROWS * 8 && row_used(by >> 3))
             c1 = brick_line(by >> 3, (by & 7) < 2 ? 0 : (by & 7) < 5 ? 1 : 2);
@@ -669,7 +665,7 @@ static void raster_build(void)
             c5 = hw4(bd[0], bd[1], bd[2]);
             c6 = hw4(cp[0], cp[1], cp[2]);
         }
-        e = raster_ent[n - 1];
+        e = raster_ent[n ? n - 1 : 0];
         if (n && e[0] == c5 && e[1] == c6 && e[2] == c1 && e[3] == c0 && e[4] < 250) {
             e[4]++;
         } else {
@@ -680,6 +676,7 @@ static void raster_build(void)
     e = raster_ent[n];                     /* terminator restores the flat palette */
     e[0] = palette[COL_PADBODY]; e[1] = palette[COL_PADCAP]; e[2] = palette[COL_BRICK];
     e[3] = palette[0]; e[4] = 0; e[5] = 0;
+    __asm__ volatile ("" ::: "memory");
     raster_tab = (unsigned long)raster_ent;
 }
 
@@ -1640,7 +1637,7 @@ static void run_microbench(void)
 int main(void)
 {
     long ssp = sup_on();
-    int i;
+    int i, flip_failed = 0;
     u32 last_clock, missed = 0, level_missed = 0;
     u32 last_score = ~0UL;
     int last_lives = -1, last_level = -1;
@@ -1671,7 +1668,7 @@ int main(void)
     if (rez != 0) set_screen(-1, -1, 0);
     { static u32 * volatile hz200 = (u32 *)0x4ba; rng = (u16)*hz200 | 1; }
 
-    palette[COL_BG] = 0x002;
+    palette[COL_BG] = 0x000;
     palette[COL_BRICK] = 0x444;
     palette[COL_RED] = 0x610;
     palette[COL_GREEN] = 0x151;
@@ -2213,18 +2210,15 @@ int main(void)
 
         /* ---- flip on VBL ---- */
 flip:
-        {   /* Ask for the flip, then wait for the blank that carries it out.
-               The ST only reloads the screen address at the blank, so the old
-               buffer stays visible until then: starting to draw before the
-               flip has happened means drawing into the picture being shown,
-               which erases objects from the top down. Timer C is the watchdog
-               in case the blank interrupt ever stops. */
-            u32 v = vbl_count, t = tick50;
+        {   /* Do not reuse the front page until the VBL handler acknowledges
+               the requested flip. A counter sampled before the request can
+               otherwise mistake an intervening VBL for a completed flip. */
+            u32 t = tick50;
             show_buffer(buf);
 #ifdef TEST
             {
                 u32 sp = 0;
-                while (vbl_count == v && (tick50 - t) < 3) sp++;
+                while (pending_screen && (tick50 - t) < 3) sp++;
                 spin_sum += sp; spin_n++;
                 if (sp < spin_min) spin_min = sp;
                 if (sp > spin_max) spin_max = sp;
@@ -2234,8 +2228,13 @@ flip:
                 }
             }
 #else
-            while (vbl_count == v && (tick50 - t) < 3) continue;
+            while (pending_screen && (tick50 - t) < 3) continue;
 #endif
+            if (pending_screen) {
+                log_str("ERROR: VBL page flip timed out\n");
+                flip_failed = 1;
+                goto shutdown;
+            }
         }
         {
             u32 now = vbl_count;
@@ -2298,9 +2297,7 @@ flip:
     }
     log_str("\n");
 
-#ifdef MICROBENCH
 shutdown:
-#endif
 #ifndef NOSOUND
     sfx_exit();
 #endif
@@ -2328,6 +2325,7 @@ shutdown:
 #ifdef EXIT_NOTERM
     for (;;) continue;                /* diagnostic: never return to TOS */
 #endif
+    if (flip_failed) cconws("VBL page flip timed out\r\n");
     sup_off(ssp);
-    return 0;
+    return flip_failed;
 }
