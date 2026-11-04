@@ -28,7 +28,7 @@ typedef struct { s32 x, y, vx, vy; u8 active; } Bomb;
 static Bomb bombs[MAX_BOMBS];
 static int enemy_hit_paddle;
 
-static Enemy enemies[MAX_ENEMIES];
+Enemy enemies[MAX_ENEMIES];                  /* scanned by gfx2.S */
 static int enemy_timer, enemy_spawns;
 #ifdef TEST
 static int enemy_shot_in;
@@ -191,20 +191,12 @@ static void enemies_update(void)
 }
 
 /* ball against enemies: bounces and damages, like a brick */
-static int enemy_ball_hit(Ball *b)
+/* a ball hit enemy i (found by enemy_scan in gfx2.S) */
+void enemy_hurt(int i)
 {
-    int i, x = (int)(b->x >> 8), y = (int)(b->y >> 8);
-    for (i = 0; i < MAX_ENEMIES; i++) {
-        Enemy *e = &enemies[i];
-        int ex, ey;
-        if (!e->active) continue;
-        ex = (int)(e->x >> 8); ey = (int)(e->y >> 8);
-        if (x + BALL_S <= ex || x >= ex + ENEMY_SIZE || y + BALL_S <= ey || y >= ey + ENEMY_SIZE) continue;
-        if (--e->hits == 0) enemy_kill(e);
-        else sfx_play(SFX_ENEMYHIT);
-        return 1;
-    }
-    return 0;
+    Enemy *e = &enemies[i];
+    if (--e->hits == 0) enemy_kill(e);
+    else sfx_play(SFX_ENEMYHIT);
 }
 
 static int enemy_bullet_hit(int bx, int by)
@@ -223,34 +215,23 @@ static int enemy_bullet_hit(int bx, int by)
     return 0;
 }
 
-/* 12x12 shaded, dithered rotation sprites (gfx_enemy in sprites.h, 8 frames
+/* 12x12 shaded, dithered rotation sprites (gfxd_enemy in sprites.h, 8 frames
    per shape). Tones are outline, shadow, body, highlight; the table maps
    them to palette entries: cube red, sphere light blue, pyramid purple
    (3 hits purple, 2 hits grey, last hit red and blinking), star gold. */
 static Sprite spr_enemy[5][8][3];
-static const char enemy_tone[5][3][4] = {
-    { {'f','b','2','a'}, {'f','b','2','a'}, {'f','b','2','a'} },   /* cube */
-    { {'f','7','d','c'}, {'f','7','d','c'}, {'f','7','d','c'} },   /* sphere */
-    { {'f','7','4','c'}, {'f','9','e','c'}, {'f','b','2','a'} },   /* pyramid */
-    { {0} , {0}, {0} },                                            /* unused */
-    { {'f','a','8','c'}, {'f','a','8','c'}, {'f','a','8','c'} }    /* star */
-};
 
 static void build_enemy_sprites(void)
 {
-    int t, f, i, v;
-    static char pix[144];
+    int t, f, v;
     build_boss_sprites();
     for (t = 0; t < 5; t++) {
-        int g = t == 4 ? 3 : t;
         if (t == 3) continue;
         for (f = 0; f < 8; f++)
             for (v = 0; v < 3; v++) {
-                for (i = 0; i < 144; i++) {
-                    char c = gfx_enemy[g][f][i / 12][i % 12];
-                    pix[i] = c >= '0' && c <= '3' ? enemy_tone[t][v][c - '0'] : ' ';
-                }
-                make_sprite(&spr_enemy[t][f][v], pix, 12, 12);
+                Sprite *sp = &spr_enemy[t][f][v];
+                sp->w = 12; sp->h = 12; sp->ng = 1; sp->cap = 60;
+                sp->d = (u16 *)gfxd_enemy[t][f][v];
             }
     }
 }

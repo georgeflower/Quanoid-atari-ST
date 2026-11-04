@@ -73,3 +73,105 @@ row:
 	dbra	%d7,row
 	movem.l	(%sp)+,%d2-%d7/%a2
 	rts
+
+| void blit_sh(u8 *buf, int x, int y, const Sprite *s)
+| Shifting blitter (any width): same result as the C blit(), but the shifts
+| are single long shifts and the masks are applied straight to screen memory.
+| Each 16-bit word w is widened to the 32-bit value (w << 16) >> sh, as
+| "lsl.l (16-sh)" or, when sh is small, "swap; lsr.l sh" (fewer shift steps).
+| d5 = group count - 1, d6 = shift count for the chosen path.
+
+.macro SHIFTW dst, path
+	.if \path
+	swap	\dst
+	lsr.l	%d6,\dst
+	.else
+	lsl.l	%d6,\dst
+	.endif
+.endm
+
+.macro BLITLOOP path
+brow\path:
+	move.l	%a0,%a2
+	move.w	%d5,%d4
+bgrp\path:
+	moveq	#0,%d0
+	move.w	(%a1)+,%d0
+	beq	bskip\path
+	SHIFTW	%d0,\path
+	not.l	%d0
+	move.w	%d0,%d1
+	swap	%d0			| d0 = ~mask_hi, d1 = ~mask_lo
+	moveq	#0,%d2
+	move.w	(%a1)+,%d2
+	SHIFTW	%d2,\path
+	and.w	%d1,8(%a2)
+	or.w	%d2,8(%a2)
+	swap	%d2
+	and.w	%d0,(%a2)
+	or.w	%d2,(%a2)
+	moveq	#0,%d2
+	move.w	(%a1)+,%d2
+	SHIFTW	%d2,\path
+	and.w	%d1,10(%a2)
+	or.w	%d2,10(%a2)
+	swap	%d2
+	and.w	%d0,2(%a2)
+	or.w	%d2,2(%a2)
+	moveq	#0,%d2
+	move.w	(%a1)+,%d2
+	SHIFTW	%d2,\path
+	and.w	%d1,12(%a2)
+	or.w	%d2,12(%a2)
+	swap	%d2
+	and.w	%d0,4(%a2)
+	or.w	%d2,4(%a2)
+	moveq	#0,%d2
+	move.w	(%a1)+,%d2
+	SHIFTW	%d2,\path
+	and.w	%d1,14(%a2)
+	or.w	%d2,14(%a2)
+	swap	%d2
+	and.w	%d0,6(%a2)
+	or.w	%d2,6(%a2)
+	bra	bnext\path
+bskip\path:
+	addq.l	#8,%a1
+bnext\path:
+	addq.l	#8,%a2
+	dbra	%d4,bgrp\path
+	lea	160(%a0),%a0
+	dbra	%d7,brow\path
+.endm
+
+	.globl	blit_sh
+blit_sh:
+	movem.l	%d2-%d7/%a2,-(%sp)
+	move.l	32(%sp),%a0		| buf
+	move.l	36(%sp),%d0		| x
+	move.l	40(%sp),%d1		| y
+	move.l	44(%sp),%a2		| sprite
+	mulu.w	#160,%d1
+	add.l	%d1,%a0
+	move.l	%d0,%d1
+	lsr.l	#4,%d1
+	lsl.l	#3,%d1
+	add.l	%d1,%a0			| first group
+	and.l	#15,%d0
+	move.w	2(%a2),%d7
+	subq.w	#1,%d7			| rows - 1
+	move.w	4(%a2),%d5
+	subq.w	#1,%d5			| groups - 1
+	move.l	8(%a2),%a1		| data
+	moveq	#16,%d6
+	sub.l	%d0,%d6			| d6 = 16 - shift
+	cmp.w	#7,%d0
+	bcc	slow
+	move.l	%d0,%d6			| small shift: swap + lsr.l by shift
+	BLITLOOP 1
+	movem.l	(%sp)+,%d2-%d7/%a2
+	rts
+slow:
+	BLITLOOP 0
+	movem.l	(%sp)+,%d2-%d7/%a2
+	rts

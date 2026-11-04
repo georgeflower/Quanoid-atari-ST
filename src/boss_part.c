@@ -17,27 +17,21 @@
 #define BOSS_SHOT_COL 2
 #define BOSS_CROSS_COL COL_EXPL
 
-/* 28x28 shaded rotation sprites (gfx_boss in sprites.h, 16 frames per shape).
+/* 28x28 shaded rotation sprites (gfxd_boss in sprites.h, 16 frames per shape).
    A flash recolours the body entry of the boss's shape. */
 #define BOSS_SPR 28
 static Sprite spr_boss[4][16];
-static const char boss_tone[4][4] = {
-    {'f','b','2','a'}, {'f','7','d','c'}, {'f','7','4','c'}, {'f','a','8','c'}
-};
 static const u8 boss_body_col[4] = { 2, 13, 4, 8 };
 static const u16 boss_body_rgb[4] = { 0x610, 0x367, 0x537, 0x760 };
 
 static void build_boss_sprites(void)
 {
-    static char pix[BOSS_SPR * BOSS_SPR];
-    int t, f, i;
+    int t, f;
     for (t = 0; t < 4; t++)
         for (f = 0; f < 16; f++) {
-            for (i = 0; i < BOSS_SPR * BOSS_SPR; i++) {
-                char c = gfx_boss[t][f][i / BOSS_SPR][i % BOSS_SPR];
-                pix[i] = c >= '0' && c <= '3' ? boss_tone[t][c - '0'] : ' ';
-            }
-            make_sprite(&spr_boss[t][f], pix, BOSS_SPR, BOSS_SPR);
+            Sprite *sp = &spr_boss[t][f];
+            sp->w = BOSS_SPR; sp->h = BOSS_SPR; sp->ng = 2; sp->cap = 280;
+            sp->d = (u16 *)gfxd_boss[t][f];
         }
 }
 
@@ -81,7 +75,8 @@ static const u8 boss_pos[9][2] = {
 typedef struct { s32 x, y, vx, vy; u8 active, size, kind, timer; } Shot;
 
 static const BossDef *bd;
-static int boss_active, boss_shape, boss_phase, boss_hp, boss_hp_max;
+int boss_active;                      /* read by gfx2.S */
+static int boss_shape, boss_phase, boss_hp, boss_hp_max;
 static int boss_x, boss_y;            /* 8.8, top-left of the box */
 static int boss_tx, boss_ty;          /* target position */
 static int boss_timer, boss_warn, boss_warn_kind, boss_hitcool, boss_flash;
@@ -477,12 +472,12 @@ static int boss_update(void)
 }
 
 /* ball against the boss box */
-static int boss_ball_hit(Ball *b)
+int boss_ball_hit(Ball *b)
 {
     int x = (int)(b->x >> 8), y = (int)(b->y >> 8);
     int bx = boss_x >> 8, by = boss_y >> 8;
     if (!boss_active || boss_dead_timer) return 0;
-    if (x + BALL_S <= bx || x >= bx + bd->w || y + BALL_S <= by || y >= by + bd->h) return 0;
+    if (!ball_box(x, y, bx, by, bd->w, bd->h)) return 0;
     boss_damage(1);
     return 1;
 }
@@ -505,7 +500,9 @@ static void boss_draw(u8 *buf)
     if (sx < PF_X) sx = PF_X;
     if (sx > PF_X2 - BOSS_SPR) sx = PF_X2 - BOSS_SPR;
     if (sy < PF_Y) sy = PF_Y;
+#ifndef NOBOSSBLIT
     blit(buf, sx, sy, &spr_boss[boss_shape][(boss_angle >> 2) & 15]);
+#endif
     add_dirty(back, sx, sy, BOSS_SPR, BOSS_SPR);
 
     if (laser_warn) {                            /* warning: dotted beam */

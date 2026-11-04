@@ -78,7 +78,7 @@ static void sfx_tick(void)
 }
 
 /* pitch: period scale in 8.8 (256 = as designed, 128 = one octave up) */
-static void sfx_play(int id);
+void sfx_play(int id);
 
 static void sfx_play_pitch(int id, u16 pitch)
 {
@@ -113,7 +113,7 @@ static void sfx_play_pitch(int id, u16 pitch)
 #endif
 }
 
-static void sfx_play(int id)
+void sfx_play(int id)
 {
     sfx_plays++;
 #ifdef DOSOUND
@@ -149,7 +149,7 @@ static void sfx_exit(void)
 
 /* ---- game state ---- */
 enum { B_EMPTY = 0, B_NORMAL = 1, B_METAL = 2, B_EXPL = 3, B_CRACK = 4 };
-static u8 cell_type[BROWS * BCOLS];
+u8 cell_type[BROWS * BCOLS];
 static u8 cell_hits[BROWS * BCOLS];
 static u8 cell_max[BROWS * BCOLS];
 static int bricks_left;           /* destructible */
@@ -169,10 +169,10 @@ static int bricks_drawn_frame, hud_drawn_frame;
 typedef struct { s32 x, y, vx, vy; s16 speed; u8 active; } Ball;
 static Ball balls[MAX_BALLS];
 static int ball_stuck;
-static int frames_since_hit;
+int frames_since_hit;
 static u16 speed_mult = 256;      /* slowdown multiplier, 8.8 (min 0.9) */
 
-static int paddle_x, paddle_w;
+int paddle_x, paddle_w;
 static Sprite spr_ball, spr_fireball, spr_paddle, spr_nub, spr_bullet;
 
 /* power-ups (rules from the web game's usePowerUps / powerUpWeights) */
@@ -207,10 +207,10 @@ static int exit_caps_seen;
 #ifdef TEST
 static int exit_hud_shot_in;
 #endif
-static int fireball_timer;            /* frames */
+int fireball_timer;            /* frames */
 static int turret_shots;
 static int has_shield;
-static int has_barrier;
+int has_barrier;
 
 #define MAX_BULLETS 4
 typedef struct { s16 x, y; u8 active; } Bullet;
@@ -498,6 +498,72 @@ static void draw_panel_labels(void)
     hud_fire = hud_turret = hud_barrier = hud_shield = -1;
 }
 
+/* slow parallax starfield: three layers drift down at different speeds.
+   The stars are painted into the static background itself, so they cost
+   nothing per frame except the few that step this frame (a star moves one
+   pixel every 8-24 frames); a step touches both buffers' dirty lists once.
+   Stars only appear where the background is empty. */
+#define NSTARS 12
+static u8 star_x[NSTARS];
+static s16 star_y[NSTARS];            /* where each star is painted, -1 = nowhere */
+static const u8 star_period[3] = { 24, 12, 8 };
+static const u8 star_col[3] = { COL_SHADE, COL_METAL, COL_LIGHT };
+
+static int bg_get(int x, int y)
+{
+    u16 *p = (u16 *)(bg + y * 160) + (x >> 4) * 4;
+    u16 m = (u16)(0x8000 >> (x & 15));
+    return (p[0] & m ? 1 : 0) | (p[1] & m ? 2 : 0) | (p[2] & m ? 4 : 0) | (p[3] & m ? 8 : 0);
+}
+
+static void bg_put(int x, int y, int col)
+{
+    u16 *p = (u16 *)(bg + y * 160) + (x >> 4) * 4;
+    u16 m = (u16)(0x8000 >> (x & 15));
+    int k;
+    for (k = 0; k < 4; k++) {
+        if (col & (1 << k)) p[k] |= m; else p[k] &= (u16)~m;
+    }
+}
+
+static u8 star_cnt[NSTARS];
+
+static void stars_reset(void)
+{
+    int i, w = PF_X2 - PF_X - 2;
+    for (i = 0; i < NSTARS; i++) {
+        star_x[i] = (u8)(PF_X + 1 + rnd() % w);
+        star_y[i] = -1;
+        star_cnt[i] = 0;
+    }
+}
+
+/* no divisions here: the 68000 has none worth the name, and a handful per
+   star per frame once cost half the frame budget */
+static void stars_update(void)
+{
+    static int y0[NSTARS];
+    int i, l = 0;
+    if (star_y[0] < 0 && !y0[0]) for (i = 0; i < NSTARS; i++) y0[i] = PF_Y + i * 9;
+    for (i = 0; i < NSTARS; i++) {
+        int x = star_x[i], y, ll = l;
+        if (++l == 3) l = 0;
+        if (star_y[i] >= 0 && ++star_cnt[i] < star_period[ll]) continue;
+        star_cnt[i] = 0;
+        y = star_y[i] >= 0 ? star_y[i] + 1 : y0[i];
+        if (y >= PF_Y + 190) y = PF_Y;
+        if (star_y[i] >= 0 && bg_get(x, star_y[i]) == star_col[ll]) {
+            bg_put(x, star_y[i], COL_BG);
+            dirty_both(x, star_y[i], 1, 1);
+        }
+        star_y[i] = (s16)y;
+        if (bg_get(x, y) == COL_BG) {
+            bg_put(x, y, star_col[ll]);
+            dirty_both(x, y, 1, 1);
+        }
+    }
+}
+
 /* hull plating of a starship: dark edge, lit rim, three rows of panel, a
    purple glow row and a cyan neon strip facing the playfield, with seams
    and blinking-style status lights along the way */
@@ -536,41 +602,10 @@ static void draw_walls(void)
     fill_rect(bg, 2, 2, 3, 3, COL_DARK);       /* corner bolts */
     fill_rect(bg, PF_X2 + 3, 2, 3, 3, COL_DARK);
     plot(bg, 3, 3, COL_WHITE); plot(bg, PF_X2 + 4, 3, COL_WHITE);
+    stars_reset();
 }
 
-/* slow parallax starfield: three layers drift down at different speeds and
-   shift sideways against the paddle, giving depth. Stars live only in the
-   back buffer (each frame's dirty list wipes them) and only show where the
-   static background is empty. */
-#define NSTARS 24
-static u8 star_x[NSTARS], star_y[NSTARS];
-static int stars_ready;
-
-static void draw_stars(u8 *buf)
-{
-    static const u8 period[3] = { 14, 7, 4 };
-    static const u8 col[3] = { COL_SHADE, COL_METAL, COL_LIGHT };
-    static const u8 sh[3] = { 8, 7, 6 };
-    int i, w = PF_X2 - PF_X - 2, h = 192 - 2;
-    if (!stars_ready) {
-        for (i = 0; i < NSTARS; i++) { star_x[i] = (u8)(rnd() % w); star_y[i] = (u8)(rnd() % h); }
-        stars_ready = 1;
-    }
-    for (i = 0; i < NSTARS; i++) {
-        int l = i % 3;
-        int x = PF_X + 1 + ((int)star_x[i] - ((paddle_x - 100) >> sh[l]) + 4 * w) % w;
-        int y = PF_Y + ((int)star_y[i] + frame_no / period[l]) % h;
-        u16 *p = (u16 *)(bg + y * 160) + (x >> 4) * 4;
-        if (p[0] | p[1] | p[2] | p[3]) {
-            u16 m = (u16)(0x8000 >> (x & 15));
-            if ((p[0] | p[1] | p[2] | p[3]) & m) continue;
-        }
-        plot(buf, x, y, col[l]);
-        add_dirty(back, x, y, 1, 1);
-    }
-}
-
-static void draw_barrier(void)
+void draw_barrier(void)
 {
     fill_rect(bg, PF_X, BARRIER_Y, PF_X2 - PF_X, 2, has_barrier ? COL_LIGHT : COL_BG);
     if (has_barrier) {
@@ -627,10 +662,10 @@ static u16 bg_at(int y)
     return hw4(r, g, b);
 }
 
-/* one brick row, shaded top to bottom: lit, body, shadow, deep shadow */
+/* one brick row, shaded top to bottom: lit, body, shadow */
 static u16 brick_line(int row, int step)
 {
-    static const u8 pct[4] = { 135, 108, 82, 58 };
+    static const u8 pct[3] = { 135, 100, 72 };
     u16 c = brick_rgb[row & 7];
     int ch[3], i;
     for (i = 0; i < 3; i++) {
@@ -641,6 +676,14 @@ static u16 brick_line(int row, int step)
     return hw4(ch[0], ch[1], ch[2]);
 }
 
+/* only rows that hold bricks get shaded bands: each band is an interrupt */
+static int row_used(int r)
+{
+    int c;
+    for (c = 0; c < BCOLS; c++) if (cell_type[r * BCOLS + c]) return 1;
+    return 0;
+}
+
 /* one entry per run of scanlines with identical colours, so a plain ST
    (3-bit) still only takes the interrupts its bands need */
 static void raster_build(void)
@@ -649,9 +692,10 @@ static void raster_build(void)
     u16 *e;
     for (y = 0; y < 200; y++) {
         u16 c5 = palette[COL_PADBODY], c6 = palette[COL_PADCAP], c1 = palette[COL_BRICK];
-        u16 c0 = bg_at(y & ~3);
+        u16 c0 = bg_at(y & ~15);
         int by = y - BR_Y, r = y - PAD_Y;
-        if (by >= 0 && by < BROWS * 8) c1 = brick_line(by >> 3, (by & 7) >> 1);
+        if (by >= 0 && by < BROWS * 8 && row_used(by >> 3))
+            c1 = brick_line(by >> 3, (by & 7) < 2 ? 0 : (by & 7) < 5 ? 1 : 2);
         if (r >= 0 && r < PAD_H) {
             const u8 *bd = pad_shade[paddle_shielded ? 1 : 0][r], *cp = pad_shade[2][r];
             c5 = hw4(bd[0], bd[1], bd[2]);
@@ -763,9 +807,10 @@ static void build_sprites(void)
         int n = pu_text[t][1] ? 2 : 1;             /* one or two characters */
         int x0 = n == 2 ? 3 : 6;
         for (f = 0; f < CAP_FR; f++) {
-            for (r = 0; r < CAP_H; r++)
+            for (r = 0; r < CAP_H; r++) {
+                char rt = roll[(r + 5 + f) % 6];
                 for (c = 0; c < CAP_W; c++) {
-                    char ch = body, tone = roll[(r + 5 + f) % 6];
+                    char ch = body, tone = rt;
                     int g;
                     if (tone == 'H') ch = hi;
                     else if (tone == 'S') ch = '7';
@@ -782,6 +827,7 @@ static void build_sprites(void)
                     }
                     cap_pix[r * CAP_W + c] = ch;
                 }
+            }
             make_sprite(&spr_capf[t][f], cap_pix, CAP_W, CAP_H);
             if (f == 0) make_sprite(&spr_cap[t], cap_pix, CAP_W, CAP_H);
         }
@@ -875,6 +921,7 @@ static void load_level(int idx)
         if (t && t != B_METAL) bricks_left++;
         draw_brick(i);
     }
+    raster_build();
     boss_active = 0;
     boss_hp_shown = -1;
     exit_open = 0;
@@ -1187,7 +1234,7 @@ static void detonate(int i)
 }
 
 /* returns 1 if the brick was removed */
-static int damage_brick(int i, Ball *b, int fire)
+int damage_brick(int i, Ball *b, int fire)
 {
     if (cell_type[i] == B_METAL) { sfx_play(SFX_BOUNCE); return 0; }
     if (cell_type[i] == B_CRACK && !fire) {
@@ -1218,82 +1265,31 @@ static int cell_at(int px, int py)
     return cell_type[r * BCOLS + c] ? r * BCOLS + c : -1;
 }
 
-static int box_hit(int x, int y)
-{
-    int h;
-    if ((h = cell_at(x, y)) >= 0) return h;
-    if ((h = cell_at(x + BALL_S - 1, y)) >= 0) return h;
-    if ((h = cell_at(x, y + BALL_S - 1)) >= 0) return h;
-    return cell_at(x + BALL_S - 1, y + BALL_S - 1);
-}
+/* gfx2.S: brick under the ball, and the stepped ball movement */
+int box_hit(int x, int y);
+int move_ball(Ball *b);
+int boss_ball_hit(Ball *b);
+void enemy_hurt(int i);
 
-static void paddle_bounce(Ball *b)
+/* the constants hard-coded in gfx2.S */
+_Static_assert(PF_X == 8 && PF_X2 == 216 && PF_Y == 8 && BR_Y == 16, "gfx2.S playfield");
+_Static_assert(BCOLS == 13 && BROWS == 14 && BALL_S == 4, "gfx2.S bricks");
+_Static_assert(PAD_Y == 184 && BARRIER_Y == 196 && MAX_DIRTY == 96, "gfx2.S layout");
+_Static_assert(sizeof(dirty[0]) == 96 * 8, "gfx2.S dirty list");
+_Static_assert(MAX_ENEMIES == 3 && ENEMY_SIZE == 12, "gfx2.S enemies");
+_Static_assert(sizeof(Enemy) == 24 && __builtin_offsetof(Enemy, active) == 16 &&
+               __builtin_offsetof(Enemy, x) == 0 && __builtin_offsetof(Enemy, y) == 4, "gfx2.S Enemy");
+_Static_assert(__builtin_offsetof(Ball, x) == 0 && __builtin_offsetof(Ball, y) == 4 &&
+               __builtin_offsetof(Ball, vx) == 8 && __builtin_offsetof(Ball, vy) == 12, "gfx2.S Ball");
+_Static_assert(B_METAL == 2 && SFX_BOUNCE == 0 && SFX_BARRIERSAVE == 11, "gfx2.S ids");
+
+void paddle_bounce(Ball *b)
 {
     sfx_play(SFX_BOUNCE);
     combo = 0;
     int cx = (int)(b->x >> 8) + BALL_S / 2;
     set_ball_dir(b, ((cx - paddle_x) * 32) / paddle_w);
     frames_since_hit = 0;
-}
-
-/* returns 1 if the ball fell out */
-static int move_ball(Ball *b)
-{
-    s32 ax = b->vx < 0 ? -b->vx : b->vx;
-    s32 ay = b->vy < 0 ? -b->vy : b->vy;
-    int steps = (int)(((ax > ay ? ax : ay) >> 8) + 1), s;
-    s32 sx = b->vx / steps, sy = b->vy / steps;
-    int fire = fireball_timer > 0;
-
-    for (s = 0; s < steps; s++) {
-        int x, y, h;
-        b->x += sx;
-        x = (int)(b->x >> 8); y = (int)(b->y >> 8);
-        if (boss_ball_hit(b) || enemy_ball_hit(b)) {
-            b->x -= sx; sx = -sx; b->vx = -b->vx;
-            frames_since_hit = 0;
-        } else if (x < PF_X || x + BALL_S > PF_X2) {
-            b->x -= sx; sx = -sx; b->vx = -b->vx;
-            frames_since_hit = 0;
-            sfx_play(SFX_BOUNCE);
-        } else if ((h = box_hit(x, y)) >= 0) {
-            frames_since_hit = 0;
-            if (!(fire && cell_type[h] != B_METAL)) {
-                b->x -= sx; sx = -sx; b->vx = -b->vx;
-            }
-            damage_brick(h, b, fire);
-        }
-        b->y += sy;
-        x = (int)(b->x >> 8); y = (int)(b->y >> 8);
-        if (boss_ball_hit(b) || enemy_ball_hit(b)) {
-            b->y -= sy; sy = -sy; b->vy = -b->vy;
-            frames_since_hit = 0;
-        } else if (y < PF_Y) {
-            b->y -= sy; sy = -sy; b->vy = -b->vy;
-            frames_since_hit = 0;
-            sfx_play(SFX_BOUNCE);
-        } else if ((h = box_hit(x, y)) >= 0) {
-            frames_since_hit = 0;
-            if (!(fire && cell_type[h] != B_METAL)) {
-                b->y -= sy; sy = -sy; b->vy = -b->vy;
-            }
-            damage_brick(h, b, fire);
-        } else if (sy > 0 && y + BALL_S >= PAD_Y && y + BALL_S <= PAD_Y + 3 &&
-                   x + BALL_S > paddle_x && x < paddle_x + paddle_w) {
-            b->y = (s32)(PAD_Y - BALL_S) << 8;
-            paddle_bounce(b);
-            sx = b->vx / steps; sy = b->vy / steps;
-        } else if (sy > 0 && has_barrier && y + BALL_S >= BARRIER_Y) {
-            b->y = (s32)(BARRIER_Y - BALL_S) << 8;
-            sy = -sy; b->vy = -b->vy;
-            has_barrier = 0;
-            draw_barrier();
-            sfx_play(SFX_BARRIERSAVE);
-        } else if (y >= 200 - BALL_S) {
-            return 1;
-        }
-    }
-    return 0;
 }
 
 static void process_pending(void)
@@ -1386,6 +1382,12 @@ static int state_timer;
 static char entry_name[4];
 static int entry_pos, entry_rank, entry_acc;
 
+#ifdef TEST
+static u32 spin_max, spin_sum, spin_n, spin_min = 0xffffffffUL;
+#endif
+static const u8 cap_frame[128] = {
+    0,1,2,3,4,5,0,1,2,3,4,5,0,1,2,3,4,5,0,1,2,3,4,5,0,1,2,3,4,5,0,1,2,3,4,5,0,1,2,3,4,5,0,1,2,3,4,5,0,1,2,3,4,5,0,1,2,3,4,5,0,1,2,3,4,5,0,1,2,3,4,5,0,1,2,3,4,5,0,1,2,3,4,5,0,1,2,3,4,5,0,1,2,3,4,5,0,1,2,3,4,5,0,1,2,3,4,5,0,1,2,3,4,5,0,1,2,3,4,5,0,1,2,3,4,5,0,1
+};
 static void show_title(void)
 {
     int i;
@@ -1717,10 +1719,16 @@ int main(void)
     palette[COL_LIGHT] = 0x555;
     palette[COL_DARK] = 0x000;
 
+#ifdef TEST
+    log_kv("T0=", *hz200_p);
+#endif
     build_sprites();
     build_enemy_sprites();
     build_all_preshift();
     build_paddle(28);
+#ifdef TEST
+    log_kv("T1=", *hz200_p); log_kv("pool=", (u32)spr_used); log_str("\n");
+#endif
     hi_load();
 
     {   /* relative mouse and joystick reporting, then take over the
@@ -1733,7 +1741,9 @@ int main(void)
     ikbd_install();
     timer_install();
     vbl_install();
+#ifndef NORASTER
     raster_install();
+#endif
 
 #ifndef NOSOUND
     sfx_init();
@@ -1815,6 +1825,7 @@ int main(void)
             } else if (state == ST_PLAY) {
                 dx = (frame_no & 64) ? 2 : -2;
             }
+#ifndef NOCAPTEST
             if (state == ST_PLAY) {            /* feed and chase a capsule of each type */
                 int k, bi = 0;
                 for (k = 0; k < MAX_BALLS; k++) if (balls[k].active && balls[k].y > balls[bi].y) bi = k;
@@ -1825,6 +1836,7 @@ int main(void)
                 for (k = 0; k < MAX_CAPS; k++)
                     if (caps[k].active && (int)(caps[k].y >> 8) > 90 && (balls[bi].vy < 0 || (int)(balls[bi].y >> 8) < 120)) dx = caps[k].x + CAP_W / 2 - paddle_w / 2 - paddle_x;
             }
+#endif
             if ((frame_no & 31) == 0) fire_edge = 1;
             if (state == ST_PLAY && frame_no == 1200) key_esc = 1;
             if (state == ST_PAUSE) {
@@ -2148,17 +2160,19 @@ int main(void)
 #endif
         /* ---- render into back buffer (frozen while paused) ---- */
         if (state == ST_PAUSE || state == ST_CLEAR) goto flip;
+#ifndef NOSTARS
+        if (state == ST_PLAY && !boss_active) stars_update();
+#endif
         for (i = 0; i < ndirty[back]; i++) {
             Rect *r = &dirty[back][i];
             restore_rect(buf, r->x, r->y, r->w, r->h);
         }
         ndirty[back] = 0;
         if (state == ST_PLAY || state == ST_OVER) {
-            draw_stars(buf);
             for (i = 0; i < MAX_CAPS; i++) {
                 Cap *c = &caps[i];
                 if (!c->active) continue;
-                blit(buf, c->x, (int)(c->y >> 8), &spr_capf[c->type][((int)(c->y >> 9)) % CAP_FR]);
+                blit(buf, c->x, (int)(c->y >> 8), &spr_capf[c->type][cap_frame[((int)(c->y >> 9)) & 127]]);
                 add_dirty(back, c->x, (int)(c->y >> 8), CAP_W, CAP_H);
             }
             for (i = 0; i < MAX_BULLETS; i++) {
@@ -2238,7 +2252,21 @@ flip:
                in case the blank interrupt ever stops. */
             u32 v = vbl_count, t = tick50;
             show_buffer(buf);
+#ifdef TEST
+            {
+                u32 sp = 0;
+                while (vbl_count == v && (tick50 - t) < 3) sp++;
+                spin_sum += sp; spin_n++;
+                if (sp < spin_min) spin_min = sp;
+                if (sp > spin_max) spin_max = sp;
+                if (spin_n == 1000) {
+                    log_kv("SLACK avg=", spin_sum / 1000); log_kv("min=", spin_min); log_kv("max=", spin_max); log_str("\n");
+                    spin_sum = 0; spin_n = 0; spin_min = 0xffffffffUL;
+                }
+            }
+#else
             while (vbl_count == v && (tick50 - t) < 3) continue;
+#endif
         }
         {
             u32 now = vbl_count;
