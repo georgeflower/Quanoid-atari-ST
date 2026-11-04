@@ -505,7 +505,9 @@ static void boss_draw(u8 *buf)
     if (sx < PF_X) sx = PF_X;
     if (sx > PF_X2 - BOSS_SPR) sx = PF_X2 - BOSS_SPR;
     if (sy < PF_Y) sy = PF_Y;
+#ifndef NOBOSSBLIT
     blit(buf, sx, sy, &spr_boss[boss_shape][(boss_angle >> 2) & 15]);
+#endif
     add_dirty(back, sx, sy, BOSS_SPR, BOSS_SPR);
 
     if (laser_warn) {                            /* warning: dotted beam */

@@ -498,6 +498,72 @@ static void draw_panel_labels(void)
     hud_fire = hud_turret = hud_barrier = hud_shield = -1;
 }
 
+/* slow parallax starfield: three layers drift down at different speeds.
+   The stars are painted into the static background itself, so they cost
+   nothing per frame except the few that step this frame (a star moves one
+   pixel every 8-24 frames); a step touches both buffers' dirty lists once.
+   Stars only appear where the background is empty. */
+#define NSTARS 12
+static u8 star_x[NSTARS];
+static s16 star_y[NSTARS];            /* where each star is painted, -1 = nowhere */
+static const u8 star_period[3] = { 24, 12, 8 };
+static const u8 star_col[3] = { COL_SHADE, COL_METAL, COL_LIGHT };
+
+static int bg_get(int x, int y)
+{
+    u16 *p = (u16 *)(bg + y * 160) + (x >> 4) * 4;
+    u16 m = (u16)(0x8000 >> (x & 15));
+    return (p[0] & m ? 1 : 0) | (p[1] & m ? 2 : 0) | (p[2] & m ? 4 : 0) | (p[3] & m ? 8 : 0);
+}
+
+static void bg_put(int x, int y, int col)
+{
+    u16 *p = (u16 *)(bg + y * 160) + (x >> 4) * 4;
+    u16 m = (u16)(0x8000 >> (x & 15));
+    int k;
+    for (k = 0; k < 4; k++) {
+        if (col & (1 << k)) p[k] |= m; else p[k] &= (u16)~m;
+    }
+}
+
+static u8 star_cnt[NSTARS];
+
+static void stars_reset(void)
+{
+    int i, w = PF_X2 - PF_X - 2;
+    for (i = 0; i < NSTARS; i++) {
+        star_x[i] = (u8)(PF_X + 1 + rnd() % w);
+        star_y[i] = -1;
+        star_cnt[i] = 0;
+    }
+}
+
+/* no divisions here: the 68000 has none worth the name, and a handful per
+   star per frame once cost half the frame budget */
+static void stars_update(void)
+{
+    static int y0[NSTARS];
+    int i, l = 0;
+    if (star_y[0] < 0 && !y0[0]) for (i = 0; i < NSTARS; i++) y0[i] = PF_Y + i * 9;
+    for (i = 0; i < NSTARS; i++) {
+        int x = star_x[i], y, ll = l;
+        if (++l == 3) l = 0;
+        if (star_y[i] >= 0 && ++star_cnt[i] < star_period[ll]) continue;
+        star_cnt[i] = 0;
+        y = star_y[i] >= 0 ? star_y[i] + 1 : y0[i];
+        if (y >= PF_Y + 190) y = PF_Y;
+        if (star_y[i] >= 0 && bg_get(x, star_y[i]) == star_col[ll]) {
+            bg_put(x, star_y[i], COL_BG);
+            dirty_both(x, star_y[i], 1, 1);
+        }
+        star_y[i] = (s16)y;
+        if (bg_get(x, y) == COL_BG) {
+            bg_put(x, y, star_col[ll]);
+            dirty_both(x, y, 1, 1);
+        }
+    }
+}
+
 /* hull plating of a starship: dark edge, lit rim, three rows of panel, a
    purple glow row and a cyan neon strip facing the playfield, with seams
    and blinking-style status lights along the way */
@@ -536,38 +602,7 @@ static void draw_walls(void)
     fill_rect(bg, 2, 2, 3, 3, COL_DARK);       /* corner bolts */
     fill_rect(bg, PF_X2 + 3, 2, 3, 3, COL_DARK);
     plot(bg, 3, 3, COL_WHITE); plot(bg, PF_X2 + 4, 3, COL_WHITE);
-}
-
-/* slow parallax starfield: three layers drift down at different speeds and
-   shift sideways against the paddle, giving depth. Stars live only in the
-   back buffer (each frame's dirty list wipes them) and only show where the
-   static background is empty. */
-#define NSTARS 24
-static u8 star_x[NSTARS], star_y[NSTARS];
-static int stars_ready;
-
-static void draw_stars(u8 *buf)
-{
-    static const u8 period[3] = { 14, 7, 4 };
-    static const u8 col[3] = { COL_SHADE, COL_METAL, COL_LIGHT };
-    static const u8 sh[3] = { 8, 7, 6 };
-    int i, w = PF_X2 - PF_X - 2, h = 192 - 2;
-    if (!stars_ready) {
-        for (i = 0; i < NSTARS; i++) { star_x[i] = (u8)(rnd() % w); star_y[i] = (u8)(rnd() % h); }
-        stars_ready = 1;
-    }
-    for (i = 0; i < NSTARS; i++) {
-        int l = i % 3;
-        int x = PF_X + 1 + ((int)star_x[i] - ((paddle_x - 100) >> sh[l]) + 4 * w) % w;
-        int y = PF_Y + ((int)star_y[i] + frame_no / period[l]) % h;
-        u16 *p = (u16 *)(bg + y * 160) + (x >> 4) * 4;
-        if (p[0] | p[1] | p[2] | p[3]) {
-            u16 m = (u16)(0x8000 >> (x & 15));
-            if ((p[0] | p[1] | p[2] | p[3]) & m) continue;
-        }
-        plot(buf, x, y, col[l]);
-        add_dirty(back, x, y, 1, 1);
-    }
+    stars_reset();
 }
 
 static void draw_barrier(void)
@@ -627,10 +662,10 @@ static u16 bg_at(int y)
     return hw4(r, g, b);
 }
 
-/* one brick row, shaded top to bottom: lit, body, shadow, deep shadow */
+/* one brick row, shaded top to bottom: lit, body, shadow */
 static u16 brick_line(int row, int step)
 {
-    static const u8 pct[4] = { 135, 108, 82, 58 };
+    static const u8 pct[3] = { 135, 100, 72 };
     u16 c = brick_rgb[row & 7];
     int ch[3], i;
     for (i = 0; i < 3; i++) {
@@ -641,6 +676,14 @@ static u16 brick_line(int row, int step)
     return hw4(ch[0], ch[1], ch[2]);
 }
 
+/* only rows that hold bricks get shaded bands: each band is an interrupt */
+static int row_used(int r)
+{
+    int c;
+    for (c = 0; c < BCOLS; c++) if (cell_type[r * BCOLS + c]) return 1;
+    return 0;
+}
+
 /* one entry per run of scanlines with identical colours, so a plain ST
    (3-bit) still only takes the interrupts its bands need */
 static void raster_build(void)
@@ -649,9 +692,10 @@ static void raster_build(void)
     u16 *e;
     for (y = 0; y < 200; y++) {
         u16 c5 = palette[COL_PADBODY], c6 = palette[COL_PADCAP], c1 = palette[COL_BRICK];
-        u16 c0 = bg_at(y & ~3);
+        u16 c0 = bg_at(y & ~15);
         int by = y - BR_Y, r = y - PAD_Y;
-        if (by >= 0 && by < BROWS * 8) c1 = brick_line(by >> 3, (by & 7) >> 1);
+        if (by >= 0 && by < BROWS * 8 && row_used(by >> 3))
+            c1 = brick_line(by >> 3, (by & 7) < 2 ? 0 : (by & 7) < 5 ? 1 : 2);
         if (r >= 0 && r < PAD_H) {
             const u8 *bd = pad_shade[paddle_shielded ? 1 : 0][r], *cp = pad_shade[2][r];
             c5 = hw4(bd[0], bd[1], bd[2]);
@@ -875,6 +919,7 @@ static void load_level(int idx)
         if (t && t != B_METAL) bricks_left++;
         draw_brick(i);
     }
+    raster_build();
     boss_active = 0;
     boss_hp_shown = -1;
     exit_open = 0;
@@ -1733,7 +1778,9 @@ int main(void)
     ikbd_install();
     timer_install();
     vbl_install();
+#ifndef NORASTER
     raster_install();
+#endif
 
 #ifndef NOSOUND
     sfx_init();
@@ -1815,6 +1862,7 @@ int main(void)
             } else if (state == ST_PLAY) {
                 dx = (frame_no & 64) ? 2 : -2;
             }
+#ifndef NOCAPTEST
             if (state == ST_PLAY) {            /* feed and chase a capsule of each type */
                 int k, bi = 0;
                 for (k = 0; k < MAX_BALLS; k++) if (balls[k].active && balls[k].y > balls[bi].y) bi = k;
@@ -1825,6 +1873,7 @@ int main(void)
                 for (k = 0; k < MAX_CAPS; k++)
                     if (caps[k].active && (int)(caps[k].y >> 8) > 90 && (balls[bi].vy < 0 || (int)(balls[bi].y >> 8) < 120)) dx = caps[k].x + CAP_W / 2 - paddle_w / 2 - paddle_x;
             }
+#endif
             if ((frame_no & 31) == 0) fire_edge = 1;
             if (state == ST_PLAY && frame_no == 1200) key_esc = 1;
             if (state == ST_PAUSE) {
@@ -2148,13 +2197,15 @@ int main(void)
 #endif
         /* ---- render into back buffer (frozen while paused) ---- */
         if (state == ST_PAUSE || state == ST_CLEAR) goto flip;
+#ifndef NOSTARS
+        if (state == ST_PLAY && !boss_active) stars_update();
+#endif
         for (i = 0; i < ndirty[back]; i++) {
             Rect *r = &dirty[back][i];
             restore_rect(buf, r->x, r->y, r->w, r->h);
         }
         ndirty[back] = 0;
         if (state == ST_PLAY || state == ST_OVER) {
-            draw_stars(buf);
             for (i = 0; i < MAX_CAPS; i++) {
                 Cap *c = &caps[i];
                 if (!c->active) continue;
