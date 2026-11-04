@@ -41,6 +41,8 @@ extern volatile unsigned long tick50;
 extern volatile unsigned long vbl_count;
 void vbl_install(void);
 void vbl_remove2(void);
+void raster_install(void);
+void raster_remove(void);
 void nf_print(const char *);
 void nf_init(void);
 int main(void);
@@ -103,6 +105,16 @@ void *memset(void *d, int c, unsigned long n)
 #define COL_PADDLE 13
 #define COL_LIGHT 14
 #define COL_DARK 15
+/* brick body and paddle colours change per scanline (raster palette); the
+   rest are fixed sprite colours: red, green, purple, shadow-violet, gold */
+#define COL_BRICK 1
+#define COL_RED 2
+#define COL_GREEN 3
+#define COL_PURPLE 4
+#define COL_PADBODY 5
+#define COL_PADCAP 6
+#define COL_SHADE 7
+#define COL_GOLD 8
 
 static u32 * volatile frclock_p = (u32 *)0x466;
 static u32 * volatile hz200_p = (u32 *)0x4ba;
@@ -154,9 +166,12 @@ static void show_buffer(u8 *b)
     *(u8 *)0xff8203 = (u8)(a >> 8);
 }
 
+static void raster_build(void);
+
 static void set_palette(void)
 {
     int i;
+    raster_build();
     for (i = 0; i < 16; i++) ((u16 *)0xff8240)[i] = palette[i];
 }
 
@@ -201,7 +216,7 @@ static void restore_rect(u8 *buf, int x, int y, int w, int h)
 
 /* sprites: per row, per 16-px group: mask, p0..p3 */
 typedef struct { s16 w, h, ng, cap; u16 *d; } Sprite;
-static u16 spr_pool[3072];
+static u16 spr_pool[32768];
 static int spr_used;
 
 static void make_sprite(Sprite *s, const char *pix, int w, int h)
@@ -252,6 +267,7 @@ static void blit(u8 *buf, int x, int y, const Sprite *s)
 
 /* ---- font (own 5x7 glyphs in 8x8 cells) ---- */
 #include "font.h"
+#include "sprites.h"
 
 static void draw_text(u8 *buf, int x, int y, const char *str, int col, int bgc)
 {
