@@ -4,7 +4,7 @@ LD      = m68k-linux-gnu-ld
 CFLAGS  = -m68000 -mstrict-align -fno-store-merging -O2 -fno-ivopts -fomit-frame-pointer -ffreestanding -fno-builtin \
           -fno-pic -fno-asynchronous-unwind-tables -Wall -Wno-main
 LIBGCC  = $(shell $(CC) -m68000 -print-libgcc-file-name)
-OBJS    = build/crt0.o build/sys.o build/math.o build/gfx.o build/ikbd.o build/blitfast.o build/gfx2.o
+OBJS    = build/crt0.o build/sys.o build/math.o build/gfx.o build/ikbd.o build/blitfast.o build/gfx2.o build/gfx3.o
 
 all: build/QUANOID.PRG build/QUANTEST.PRG
 
