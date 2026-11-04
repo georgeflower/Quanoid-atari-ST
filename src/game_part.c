@@ -807,9 +807,10 @@ static void build_sprites(void)
         int n = pu_text[t][1] ? 2 : 1;             /* one or two characters */
         int x0 = n == 2 ? 3 : 6;
         for (f = 0; f < CAP_FR; f++) {
-            for (r = 0; r < CAP_H; r++)
+            for (r = 0; r < CAP_H; r++) {
+                char rt = roll[(r + 5 + f) % 6];
                 for (c = 0; c < CAP_W; c++) {
-                    char ch = body, tone = roll[(r + 5 + f) % 6];
+                    char ch = body, tone = rt;
                     int g;
                     if (tone == 'H') ch = hi;
                     else if (tone == 'S') ch = '7';
@@ -826,6 +827,7 @@ static void build_sprites(void)
                     }
                     cap_pix[r * CAP_W + c] = ch;
                 }
+            }
             make_sprite(&spr_capf[t][f], cap_pix, CAP_W, CAP_H);
             if (f == 0) make_sprite(&spr_cap[t], cap_pix, CAP_W, CAP_H);
         }
@@ -1431,6 +1433,12 @@ static int state_timer;
 static char entry_name[4];
 static int entry_pos, entry_rank, entry_acc;
 
+#ifdef TEST
+static u32 spin_max, spin_sum, spin_n, spin_min = 0xffffffffUL;
+#endif
+static const u8 cap_frame[128] = {
+    0,1,2,3,4,5,0,1,2,3,4,5,0,1,2,3,4,5,0,1,2,3,4,5,0,1,2,3,4,5,0,1,2,3,4,5,0,1,2,3,4,5,0,1,2,3,4,5,0,1,2,3,4,5,0,1,2,3,4,5,0,1,2,3,4,5,0,1,2,3,4,5,0,1,2,3,4,5,0,1,2,3,4,5,0,1,2,3,4,5,0,1,2,3,4,5,0,1,2,3,4,5,0,1,2,3,4,5,0,1,2,3,4,5,0,1,2,3,4,5,0,1,2,3,4,5,0,1
+};
 static void show_title(void)
 {
     int i;
@@ -1762,10 +1770,16 @@ int main(void)
     palette[COL_LIGHT] = 0x555;
     palette[COL_DARK] = 0x000;
 
+#ifdef TEST
+    log_kv("T0=", *hz200_p);
+#endif
     build_sprites();
     build_enemy_sprites();
     build_all_preshift();
     build_paddle(28);
+#ifdef TEST
+    log_kv("T1=", *hz200_p); log_kv("pool=", (u32)spr_used); log_str("\n");
+#endif
     hi_load();
 
     {   /* relative mouse and joystick reporting, then take over the
@@ -2209,7 +2223,7 @@ int main(void)
             for (i = 0; i < MAX_CAPS; i++) {
                 Cap *c = &caps[i];
                 if (!c->active) continue;
-                blit(buf, c->x, (int)(c->y >> 8), &spr_capf[c->type][((int)(c->y >> 9)) % CAP_FR]);
+                blit(buf, c->x, (int)(c->y >> 8), &spr_capf[c->type][cap_frame[((int)(c->y >> 9)) & 127]]);
                 add_dirty(back, c->x, (int)(c->y >> 8), CAP_W, CAP_H);
             }
             for (i = 0; i < MAX_BULLETS; i++) {
@@ -2289,7 +2303,21 @@ flip:
                in case the blank interrupt ever stops. */
             u32 v = vbl_count, t = tick50;
             show_buffer(buf);
+#ifdef TEST
+            {
+                u32 sp = 0;
+                while (vbl_count == v && (tick50 - t) < 3) sp++;
+                spin_sum += sp; spin_n++;
+                if (sp < spin_min) spin_min = sp;
+                if (sp > spin_max) spin_max = sp;
+                if (spin_n == 1000) {
+                    log_kv("SLACK avg=", spin_sum / 1000); log_kv("min=", spin_min); log_kv("max=", spin_max); log_str("\n");
+                    spin_sum = 0; spin_n = 0; spin_min = 0xffffffffUL;
+                }
+            }
+#else
             while (vbl_count == v && (tick50 - t) < 3) continue;
+#endif
         }
         {
             u32 now = vbl_count;

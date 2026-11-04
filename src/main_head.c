@@ -217,12 +217,12 @@ static void restore_rect(u8 *buf, int x, int y, int w, int h)
 
 /* sprites: per row, per 16-px group: mask, p0..p3 */
 typedef struct { s16 w, h, ng, cap; u16 *d; } Sprite;
-static u16 spr_pool[32768];
+static u16 spr_pool[8192];
 static int spr_used;
 
 static void make_sprite(Sprite *s, const char *pix, int w, int h)
 {
-    int r, c, g;
+    int r, c;
     s->w = (s16)w; s->h = (s16)h; s->ng = (s16)((w + 15) >> 4);
     if (!s->d || s->cap < h * s->ng * 5) {
         s->d = spr_pool + spr_used;
@@ -230,20 +230,26 @@ static void make_sprite(Sprite *s, const char *pix, int w, int h)
         spr_used += s->cap;
     }
     memset(s->d, 0, (unsigned long)h * s->ng * 5 * 2);
-    for (r = 0; r < h; r++)
-        for (c = 0; c < w; c++) {
-            char ch = pix[r * w + c];
-            int col, pl;
-            u16 bit = (u16)(0x8000 >> (c & 15));
-            u16 *gp;
-            if (ch == ' ') continue;
-            col = (ch <= '9') ? ch - '0' : ch - 'a' + 10;
-            g = c >> 4;
-            gp = s->d + (r * s->ng + g) * 5;
-            gp[0] |= bit;
-            for (pl = 0; pl < 4; pl++)
-                if ((col >> pl) & 1) gp[1 + pl] |= bit;
+    {
+        u16 *rowp = s->d;
+        int rstep = s->ng * 5;
+        for (r = 0; r < h; r++, rowp += rstep) {
+            u16 *gp = rowp;
+            for (c = 0; c < w; c++) {
+                char ch = *pix++;
+                if ((c & 15) == 0 && c) gp += 5;
+                if (ch != ' ') {
+                    int col = (ch <= '9') ? ch - '0' : ch - 'a' + 10;
+                    u16 bit = (u16)(0x8000 >> (c & 15));
+                    gp[0] |= bit;
+                    if (col & 1) gp[1] |= bit;
+                    if (col & 2) gp[2] |= bit;
+                    if (col & 4) gp[3] |= bit;
+                    if (col & 8) gp[4] |= bit;
+                }
+            }
         }
+    }
 }
 
 static void blit(u8 *buf, int x, int y, const Sprite *s)

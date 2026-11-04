@@ -17,27 +17,21 @@
 #define BOSS_SHOT_COL 2
 #define BOSS_CROSS_COL COL_EXPL
 
-/* 28x28 shaded rotation sprites (gfx_boss in sprites.h, 16 frames per shape).
+/* 28x28 shaded rotation sprites (gfxd_boss in sprites.h, 16 frames per shape).
    A flash recolours the body entry of the boss's shape. */
 #define BOSS_SPR 28
 static Sprite spr_boss[4][16];
-static const char boss_tone[4][4] = {
-    {'f','b','2','a'}, {'f','7','d','c'}, {'f','7','4','c'}, {'f','a','8','c'}
-};
 static const u8 boss_body_col[4] = { 2, 13, 4, 8 };
 static const u16 boss_body_rgb[4] = { 0x610, 0x367, 0x537, 0x760 };
 
 static void build_boss_sprites(void)
 {
-    static char pix[BOSS_SPR * BOSS_SPR];
-    int t, f, i;
+    int t, f;
     for (t = 0; t < 4; t++)
         for (f = 0; f < 16; f++) {
-            for (i = 0; i < BOSS_SPR * BOSS_SPR; i++) {
-                char c = gfx_boss[t][f][i / BOSS_SPR][i % BOSS_SPR];
-                pix[i] = c >= '0' && c <= '3' ? boss_tone[t][c - '0'] : ' ';
-            }
-            make_sprite(&spr_boss[t][f], pix, BOSS_SPR, BOSS_SPR);
+            Sprite *sp = &spr_boss[t][f];
+            sp->w = BOSS_SPR; sp->h = BOSS_SPR; sp->ng = 2; sp->cap = 280;
+            sp->d = (u16 *)gfxd_boss[t][f];
         }
 }
 
