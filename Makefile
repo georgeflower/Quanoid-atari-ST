@@ -8,7 +8,7 @@ OBJS    = build/crt0.o build/sys.o build/math.o build/gfx.o build/ikbd.o build/b
 
 all: build/QUANOID.PRG build/QUANTEST.PRG
 
-src/main.c: src/main_head.c src/game_part.c src/boss_part.c tools/assemble.py
+src/main.c: src/main_head.c src/game_part.c src/boss_part.c src/enemy_part.c tools/assemble.py
 	python3 tools/assemble.py $@
 
 src/levels.h: tools/levels.txt tools/genlevels.py
@@ -31,6 +31,11 @@ build/%.elf: $(OBJS) build/%.o src/link.ld
 build/QUANOID.PRG: build/main.elf
 	sh tools/checkalign.sh $<
 	python3 tools/elf2prg.py $< $@
+
+releases/qnoid%.st: build/QUANOID.PRG releases/QUANOID-v2.8.ST
+	cp releases/QUANOID-v2.8.ST $@
+	mcopy -o -i $@ $< ::QUANOID.PRG
+	mcopy -o -i $@ $< ::AUTO/QUANOID.PRG
 build/QUANTEST.PRG: build/main_test.elf
 	sh tools/checkalign.sh $<
 	python3 tools/elf2prg.py $< $@

@@ -66,6 +66,10 @@ automatically by `make`.
 
 ## Running
 
+To build a 720 KB floppy image named for a PR, install `mtools` and run, for
+example, `make releases/qnoid003.st`. This updates both the root executable
+and `AUTO/QUANOID.PRG`, which runs automatically when the floppy boots.
+
 Copy `build/QUANOID.PRG` to a TOS-bootable disk image or hard drive folder and
 launch it, or run it under [Hatari](https://hatari.tuxfamily.org/) with a
 TOS/EmuTOS ROM:
