@@ -16,12 +16,14 @@ LIGHT = tuple(c / _l for c in LIGHT)
 BAYER = [[0, 8, 2, 10], [12, 4, 14, 6], [3, 11, 1, 9], [15, 7, 13, 5]]
 
 
-def rot(v, yaw, pitch):
+def rot(v, yaw, pitch, roll=0):
     x, y, z = v
     c, s = math.cos(yaw), math.sin(yaw)
     x, z = x * c + z * s, -x * s + z * c
     c, s = math.cos(pitch), math.sin(pitch)
     y, z = y * c - z * s, y * s + z * c
+    c, s = math.cos(roll), math.sin(roll)
+    x, y = x * c - y * s, x * s + y * c
     return (x, y, z)
 
 
@@ -77,11 +79,11 @@ def spike(axis, r, w):
     return out
 
 
-def solid_hit(planes, yaw, pitch, x, y):
+def solid_hit(planes, yaw, pitch, x, y, roll=0):
     zmax, face = 1e9, None
     zmin = -1e9
     for n, d in planes:
-        nx, ny, nz = rot(n, yaw, pitch)
+        nx, ny, nz = rot(n, yaw, pitch, roll)
         r = d - nx * x - ny * y
         if abs(nz) < 1e-9:
             if r < 0:
@@ -99,29 +101,32 @@ def solid_hit(planes, yaw, pitch, x, y):
     return zmax, face
 
 
-def shade_face(n, base=0.0):
+def shade_face(n, base=0.0, light=LIGHT):
     nx, ny, nz = n
-    b = nx * LIGHT[0] + ny * LIGHT[1] + nz * LIGHT[2]
+    b = nx * light[0] + ny * light[1] + nz * light[2]
     return max(0.0, min(1.0, 0.10 + 0.90 * max(b, 0.0) ** 1.5 + base))
 
 
-def sphere_hit(yaw, pitch, x, y, r, stripes=True):
+def sphere_hit(yaw, pitch, x, y, r, stripes=True, roll=0, rotating_light=False):
     q = x * x + y * y
     if q > r * r:
         return None
     z = math.sqrt(r * r - q)
     n = (x / r, y / r, z / r)
-    b = shade_face(n)
+    light = rot(LIGHT, yaw, pitch, roll) if rotating_light else LIGHT
+    b = shade_face(n, light=light)
     # specular glint
-    hx, hy, hz = LIGHT[0], LIGHT[1], LIGHT[2] + 1
+    hx, hy, hz = light[0], light[1], light[2] + 1
     ln = math.sqrt(hx * hx + hy * hy + hz * hz)
     spec = max(0.0, (n[0] * hx + n[1] * hy + n[2] * hz) / ln) ** 14
     if stripes:
         # un-rotate the normal into object space and band it by longitude
+        c, s = math.cos(-roll), math.sin(-roll)
+        nx, ny = n[0] * c - n[1] * s, n[0] * s + n[1] * c
         c, s = math.cos(-pitch), math.sin(-pitch)
-        ny, nz = n[1] * c - n[2] * s, n[1] * s + n[2] * c
+        ny, nz = ny * c - n[2] * s, ny * s + n[2] * c
         c, s = math.cos(-yaw), math.sin(-yaw)
-        nx, nz = n[0] * c + nz * s, -n[0] * s + nz * c
+        nx, nz = nx * c + nz * s, -nx * s + nz * c
         lon = math.atan2(nx, nz)
         if abs(math.sin(lon * 2)) < 0.34:
             b = max(0.0, b - 0.18)
@@ -189,10 +194,10 @@ def render(size, scene, frames, scale, pitch, period, outline=True, dither=True)
 
 
 def solids_scene(solids):
-    def scene(yaw, pitch, x, y):
+    def scene(yaw, pitch, x, y, roll=0):
         best = None
         for planes, ox, oy, oz in solids:
-            h = solid_hit(planes, yaw, pitch, x - ox, y - oy)
+            h = solid_hit(planes, yaw, pitch, x - ox, y - oy, roll)
             if h and (best is None or h[0] + oz > best[0]):
                 best = (h[0] + oz, shade_face(h[1]))
         return best
@@ -259,13 +264,43 @@ def frames_for(kind, size, frames, scale):
     scene, pitch, period = make_scene(kind)
     return render(size, scene, frames, scale, pitch, period, dither=kind != "sphere")
 
+BOSS_FRAMES = 32
+
+
+def boss_scene(kind):
+    scene, pitch, period = make_scene(kind)
+
+    def animated(angle, tilt, x, y):
+        if kind == "pyramid":
+            return scene(angle, pitch, x, y)
+        if kind == "hex":
+            return scene(angle, pitch, x, y, angle)
+        if kind == "sphere":
+            return sphere_hit(angle, pitch, x, y, 0.92, rotating_light=True)
+        return scene(angle, tilt, x, y)
+    return animated, pitch
+
+
+def pyramid_boss_frames():
+    scene, pitch = boss_scene("pyramid")
+    return render(44, scene, BOSS_FRAMES, 28 * 0.52 * 1.10, pitch, 2 * math.pi)
+
 
 def emit_boss(f):
     data = []
     for kind in ["cube", "sphere", "pyramid", "hex"]:
-        for rows in frames_for(kind, 28, 16, 28 * (0.48 if kind == "sphere" else 0.52)):
+        if kind == "pyramid":
+            data += [0] * (BOSS_FRAMES * 28 * 2 * 5)
+            continue
+        scene, pitch = boss_scene(kind)
+        for rows in render(28, scene, BOSS_FRAMES, 28 * (0.48 if kind == "sphere" else 0.52),
+                           pitch, 2 * math.pi, dither=kind != "sphere"):
             data += planar(rows, BOSS_TONE[kind], 28)
-    emit_words(f, "gfxd_boss", [4, 16, 28 * 2 * 5], data)
+    emit_words(f, "gfxd_boss", [4, BOSS_FRAMES, 28 * 2 * 5], data)
+    data = []
+    for rows in pyramid_boss_frames():
+        data += planar(rows, BOSS_TONE["pyramid"], 44)
+    emit_words(f, "gfxd_pyramid_boss", [BOSS_FRAMES, 44 * 3 * 5], data)
 
 
 def emit_enemy(f):

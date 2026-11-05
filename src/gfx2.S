@@ -440,7 +440,13 @@ bb_no:
 	CALL1	boss_ball_hit
 	tst.l	%d0
 	bne	\target
-1:	move.l	4(%a2),%d0
+1:	tst.b	enemies+ENEMY_ACTIVE
+	bne.s	3f
+	tst.b	enemies+ENEMY_STRIDE+ENEMY_ACTIVE
+	bne.s	3f
+	tst.b	enemies+2*ENEMY_STRIDE+ENEMY_ACTIVE
+	beq.s	2f
+3:	move.l	4(%a2),%d0
 	asr.l	#8,%d0
 	move.l	%d0,-(%sp)
 	move.l	(%a2),%d0
@@ -498,8 +504,15 @@ mb_step:
 	addq.l	#BALL_S,%d0
 	cmp.l	#PF_X2,%d0
 	bgt.s	mb_xwall
+	| Boss levels have no bricks.
+	tst.l	boss_active
+	bne	mb_ystep
 	move.l	4(%a2),%d1
 	asr.l	#8,%d1
+	cmp.l	#BR_Y+BROWS*8,%d1
+	bge	mb_ystep
+	cmp.l	#BR_Y-BALL_S+1,%d1
+	blt	mb_ystep
 	move.l	%d1,-(%sp)
 	move.l	(%a2),%d0
 	asr.l	#8,%d0
@@ -548,6 +561,12 @@ mb_ystep:
 	asr.l	#8,%d1			| y
 	cmp.l	#PF_Y,%d1
 	blt	mb_ywall
+	tst.l	boss_active
+	bne	mb_ypad
+	cmp.l	#BR_Y+BROWS*8,%d1
+	bge	mb_ypad
+	cmp.l	#BR_Y-BALL_S+1,%d1
+	blt	mb_ypad
 	move.l	%d1,-(%sp)
 	move.l	(%a2),%d0
 	asr.l	#8,%d0

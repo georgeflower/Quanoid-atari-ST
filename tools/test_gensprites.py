@@ -1,10 +1,67 @@
 import math
 import unittest
+from unittest.mock import patch
 
 import gensprites
 
 
 class RotationTests(unittest.TestCase):
+    def test_pyramid_boss_scale_and_unclipped_frames(self):
+        with patch.object(gensprites, "render", wraps=gensprites.render) as renderer:
+            frames = gensprites.pyramid_boss_frames()
+        args = renderer.call_args.args
+        self.assertEqual(args[0], 44)
+        self.assertAlmostEqual(args[3] / (28 * 0.52), 1.10)
+        self.assertAlmostEqual(args[5], 2 * math.pi)
+        self.assertEqual(len(frames), 32)
+        for rows in frames:
+            self.assertTrue(all(pixel == " " for pixel in rows[0] + rows[-1]))
+            self.assertTrue(all(row[0] == row[-1] == " " for row in rows))
+
+    def test_boss_rotation_axes(self):
+        for kind in ("pyramid", "hex"):
+            calls = []
+
+            def scene(yaw, pitch, x, y, roll=0):
+                calls.append((yaw, pitch, roll))
+                return None
+
+            with patch.object(gensprites, "make_scene", return_value=(scene, -0.4, 1)):
+                animated, pitch = gensprites.boss_scene(kind)
+            animated(1.2, 0.8, 0, 0)
+            self.assertEqual(calls, [(1.2, -0.4, 0 if kind == "pyramid" else 1.2)])
+        animated, pitch = gensprites.boss_scene("sphere")
+        with patch.object(gensprites, "sphere_hit", return_value=None) as sphere:
+            animated(1.2, 0.8, 0, 0)
+        self.assertEqual(sphere.call_args.args[:2], (1.2, pitch))
+        self.assertEqual(sphere.call_args.kwargs, {"rotating_light": True})
+
+    def test_pyramid_shows_all_sides_but_not_bottom(self):
+        planes = gensprites.pyramid_planes(0.80, 1.4)
+        _, pitch = gensprites.boss_scene("pyramid")
+        seen = set()
+        for frame in range(gensprites.BOSS_FRAMES):
+            yaw = 2 * math.pi * frame / gensprites.BOSS_FRAMES
+            normals = [gensprites.rot(n, yaw, pitch) for n, _ in planes]
+            for y in range(-16, 17):
+                for x in range(-16, 17):
+                    hit = gensprites.solid_hit(planes, yaw, pitch, x / 16, y / 16)
+                    if hit:
+                        seen.add(normals.index(hit[1]))
+        self.assertEqual(seen, {1, 2, 3, 4})
+
+    def test_sphere_highlight_moves(self):
+        left = gensprites.sphere_hit(0, -0.3, -0.4, -0.4, 0.92, stripes=False,
+                                     rotating_light=True)[1]
+        right = gensprites.sphere_hit(0, -0.3, 0.4, -0.4, 0.92, stripes=False,
+                                      rotating_light=True)[1]
+        rotated_left = gensprites.sphere_hit(math.pi / 2, -0.3, -0.4, -0.4, 0.92,
+                                             stripes=False, rotating_light=True)[1]
+        rotated_right = gensprites.sphere_hit(math.pi / 2, -0.3, 0.4, -0.4, 0.92,
+                                              stripes=False, rotating_light=True)[1]
+        self.assertGreater(left, right)
+        self.assertGreater(rotated_right, rotated_left)
+
     def test_both_axes_rotate(self):
         angles = []
 

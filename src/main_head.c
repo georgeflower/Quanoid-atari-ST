@@ -59,7 +59,7 @@ int ball_box(int x, int y, int bx, int by, int w, int h);   /* gfx2.S */
 int enemy_scan(const void *enemies, int x, int y);
 void blit_sh(u8 *buf, int x, int y, const void *s);
 void blit_pre(u8 *buf, int gx, int y, int h, const u16 *tab);
-#define VERSION "005"
+#define VERSION "007"
 long ikbdws(long count, const char *buf);
 extern unsigned char mouse_btn;
 
