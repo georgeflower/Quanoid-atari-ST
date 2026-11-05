@@ -59,6 +59,7 @@ timer_remove:
 
 | ---- Timer C: 200 Hz, every 4th tick is a game frame -------------------
 timerc_isr:
+	move.w	#0x2300,%sr		| allow VBL and higher-priority Timer B during TOS's tick
 	addq.w	#1,tc_count
 	cmpi.w	#4,tc_count
 	blt.s	1f
@@ -72,6 +73,7 @@ timerc_isr:
 | $F6 status (6), $F7 absolute mouse (5), $FC clock (6), $FD joysticks (2),
 | anything else is a key make/break code.
 ikbd_isr:
+	move.w	#0x2300,%sr		| mouse traffic must not hold off the raster interrupt
 	movem.l	%d0-%d2/%a0-%a1,-(%sp)
 1:	btst	#0,midi_ctrl.w		| MIDI shares this interrupt
 	beq.s	2f
@@ -218,8 +220,31 @@ key_buf:	.ds.b	16
 	.text
 | ---- our own vertical blank counter --------------------------------
 | Chained to TOS's handler so nothing of TOS's own VBL work is skipped.
-| A pending page is installed here before its flip is acknowledged.
+| The ST latches the base three scanlines BEFORE VBL. Queue it in advance
+| and acknowledge only when the live Shifter counter contains that page.
 	.globl	vbl_install, vbl_remove2, vbl_count, pending_screen
+	.globl	queue_screen, video_address
+queue_screen:
+	move.w	%sr,-(%sp)
+	move.w	#0x2700,%sr
+	move.l	6(%sp),%d0
+	move.l	%d0,pending_screen
+	lsr.l	#8,%d0
+	move.b	%d0,0xffff8203.w
+	lsr.l	#8,%d0
+	move.b	%d0,0xffff8201.w
+	move.w	(%sp)+,%sr
+	rts
+
+video_address:
+	moveq	#0,%d0
+	move.b	0xffff8205.w,%d0
+	lsl.l	#8,%d0
+	move.b	0xffff8207.w,%d0
+	lsl.l	#8,%d0
+	move.b	0xffff8209.w,%d0
+	rts
+
 vbl_install:
 	move.w	%sr,-(%sp)
 	move.w	#0x2700,%sr
@@ -252,12 +277,11 @@ vbl_remove2:
 
 vbl_isr:
 	movem.l	%d0/%a0,-(%sp)
-	move.l	pending_screen,%d0
+	tst.l	pending_screen
 	beq.s	0f
-	lsr.l	#8,%d0
-	move.b	%d0,0xffff8203.w
-	lsr.l	#8,%d0
-	move.b	%d0,0xffff8201.w
+	bsr	video_address
+	cmp.l	pending_screen,%d0
+	bne.s	0f
 	clr.l	pending_screen
 0:	addq.l	#1,vbl_count
 	tst.l	raster_tab
@@ -303,7 +327,6 @@ raster_remove:
 tb_isr:
 	move.l	%a0,-(%sp)
 	move.l	raster_ptr,%a0
-	move.w	6(%a0),0xffff8240.w
 	move.l	(%a0),0xffff824a.w
 	move.w	4(%a0),0xffff8242.w
 	move.l	%d0,-(%sp)

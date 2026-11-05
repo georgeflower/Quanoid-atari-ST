@@ -411,17 +411,17 @@ static void draw_hud(void)
     int i;
     for (i = 0; i < 8; i++) hud_score_prev[i] = 0;
     draw_score();
-    draw_number(PANEL_X + 40, 76, (u32)level_idx + 1, 2);
-    draw_number(PANEL_X + 40, 108, (u32)lives, 2);
-    fill_rect(bg, PANEL_X + 10, 118, 76, 4, COL_BG);   /* one mini paddle per spare life */
+    draw_number(PANEL_X + 40, HUD_LEVEL_Y + 14, (u32)level_idx + 1, 2);
+    draw_number(PANEL_X + 40, HUD_LIVES_Y + 14, (u32)lives, 2);
+    fill_rect(bg, PANEL_X + 10, HUD_LIVES_Y + 24, 76, 4, COL_BG);   /* one mini paddle per spare life */
     for (i = 0; i < lives - 1 && i < 5; i++) {
         int x = PANEL_X + 10 + i * 15;
-        fill_rect(bg, x, 118, 13, 4, COL_PADDLE);
-        fill_rect(bg, x, 118, 3, 4, COL_EXPL);
-        fill_rect(bg, x + 10, 118, 3, 4, COL_EXPL);
-        fill_rect(bg, x + 3, 118, 7, 1, COL_WHITE);
+        fill_rect(bg, x, HUD_LIVES_Y + 24, 13, 4, COL_PADDLE);
+        fill_rect(bg, x, HUD_LIVES_Y + 24, 3, 4, COL_EXPL);
+        fill_rect(bg, x + 10, HUD_LIVES_Y + 24, 3, 4, COL_EXPL);
+        fill_rect(bg, x + 3, HUD_LIVES_Y + 24, 7, 1, COL_WHITE);
     }
-    dirty_both(PANEL_X + 10, 118, 76, 4);
+    dirty_both(PANEL_X + 10, HUD_LIVES_Y + 24, 76, 4);
 }
 
 /* power-up status lines; each line is redrawn only when its own value changes */
@@ -439,33 +439,33 @@ static void draw_power_hud(void)
     int f = fireball_timer ? (fireball_timer + 24) / 25 : 0;
     if (f != hud_fire) {
         hud_fire = f;
-        power_line(128);
+        power_line(HUD_POWER_Y);
         if (f) {
-            draw_text(bg, PANEL_X + 8, 128, "FIRE", COL_EXPL, COL_DARK);
-            fill_rect(bg, PANEL_X + 48, 130, f * 4, 4, COL_EXPL);
+            draw_text(bg, PANEL_X + 8, HUD_POWER_Y, "FIRE", COL_EXPL, COL_DARK);
+            fill_rect(bg, PANEL_X + 48, HUD_POWER_Y + 2, f * 4, 4, COL_EXPL);
         }
     }
     if (turret_shots != hud_turret) {
         char b[12];
         if (turret_shots && hud_turret > 0) {          /* number only */
-            fill_rect(bg, PANEL_X + 64, 138, 16, 8, COL_DARK);
-            dirty_both(PANEL_X + 64, 138, 16, 8);
+            fill_rect(bg, PANEL_X + 64, HUD_POWER_Y + 8, 16, 8, COL_DARK);
+            dirty_both(PANEL_X + 64, HUD_POWER_Y + 8, 16, 8);
         } else {
-            power_line(138);
-            if (turret_shots) draw_text(bg, PANEL_X + 8, 138, "TURRET", COL_LIGHT, COL_DARK);
+            power_line(HUD_POWER_Y + 8);
+            if (turret_shots) draw_text(bg, PANEL_X + 8, HUD_POWER_Y + 8, "TURRET", COL_LIGHT, COL_DARK);
         }
-        if (turret_shots) draw_text(bg, PANEL_X + 64, 138, utoa((u32)turret_shots, b + 11), COL_WHITE, COL_DARK);
+        if (turret_shots) draw_text(bg, PANEL_X + 64, HUD_POWER_Y + 8, utoa((u32)turret_shots, b + 11), COL_WHITE, COL_DARK);
         hud_turret = turret_shots;
     }
     if (has_barrier != hud_barrier) {
         hud_barrier = has_barrier;
-        power_line(148);
-        if (has_barrier) draw_text(bg, PANEL_X + 8, 148, "BARRIER", COL_LIGHT, COL_DARK);
+        power_line(HUD_POWER_Y + 16);
+        if (has_barrier) draw_text(bg, PANEL_X + 8, HUD_POWER_Y + 16, "BARRIER", COL_LIGHT, COL_DARK);
     }
     if (has_shield != hud_shield) {
         hud_shield = has_shield;
-        power_line(158);
-        if (has_shield) draw_text(bg, PANEL_X + 8, 158, "SHIELD", COL_LIGHT, COL_DARK);
+        power_line(HUD_POWER_Y + 24);
+        if (has_shield) draw_text(bg, PANEL_X + 8, HUD_POWER_Y + 24, "SHIELD", COL_LIGHT, COL_DARK);
     }
 }
 
@@ -487,10 +487,10 @@ static void draw_panel_labels(void)
     fill_rect(bg, PANEL_X + 10, 20, 76, 1, COL_METAL);
     draw_text(bg, PANEL_X + 16, 26, "SCORE", COL_LIGHT, COL_DARK);
     draw_box(PANEL_X + 8, 36, 80, 15);
-    draw_text(bg, PANEL_X + 16, 62, "LEVEL", COL_LIGHT, COL_DARK);
-    draw_box(PANEL_X + 8, 72, 80, 15);
-    draw_text(bg, PANEL_X + 16, 94, "LIVES", COL_LIGHT, COL_DARK);
-    draw_box(PANEL_X + 8, 104, 80, 22);
+    draw_text(bg, PANEL_X + 16, HUD_LEVEL_Y, "LEVEL", COL_LIGHT, COL_DARK);
+    draw_box(PANEL_X + 8, HUD_LEVEL_Y + 10, 80, 15);
+    draw_text(bg, PANEL_X + 16, HUD_LIVES_Y, "LIVES", COL_LIGHT, COL_DARK);
+    draw_box(PANEL_X + 8, HUD_LIVES_Y + 10, 80, 20);
     fill_rect(bg, PANEL_X + 10, 166, 76, 1, COL_METAL);
     draw_text(bg, PANEL_X + 8, 180, "ESC=PAUSE", COL_METAL, COL_DARK);
     draw_text(bg, PANEL_X + 8, 190, VERSION, COL_METAL, COL_DARK);
@@ -840,9 +840,9 @@ static void draw_exit_door(void)
 /* ---- level ---- */
 static void sync_pages(void)
 {
-    memcpy(scr[0], bg, 32000);
-    memcpy(scr[1], bg, 32000);
+    memcpy(scr[back], bg, 32000);
     ndirty[0] = ndirty[1] = 0;
+    add_dirty(1 - back, 0, 0, 320, 200);
 }
 
 static void reset_ball(void)
@@ -1342,11 +1342,75 @@ static void save_shot(u8 *buf, const char *what)
 #endif
 
 /* ---- screens ---- */
-enum { ST_TITLE, ST_PLAY, ST_OVER, ST_ENTRY, ST_PAUSE, ST_CLEAR, ST_QUIT };
+enum { ST_TITLE, ST_PLAY, ST_OVER, ST_ENTRY, ST_PAUSE, ST_CLEAR, ST_QUIT, ST_INSTRUCTIONS };
 static int state;
 static int state_timer;
 static char entry_name[4];
 static int entry_pos, entry_rank, entry_acc;
+static int title_choice;
+static u8 menu_joy_prev;
+
+static void draw_title_buttons(void)
+{
+    int i;
+    static const char *labels[2] = { "START GAME", "INSTRUCTIONS" };
+    for (i = 0; i < 2; i++) {
+        int x = i ? 164 : 36, w = i ? 120 : 112;
+        draw_box(x, 148, w, 15);
+        draw_text(bg, x + 8, 152, labels[i], title_choice == i ? COL_WHITE : COL_METAL, COL_BG);
+        if (title_choice == i) fill_rect(bg, x + 2, 150, 2, 11, COL_PADDLE);
+        dirty_both(x, 148, w, 15);
+    }
+}
+
+static void show_instructions(void)
+{
+    static const char *explanation[PU_COUNT] = {
+        "MULTIBALL: UP TO THREE BALLS",
+        "TURRET: 30 SHOTS, CLICK/FIRE",
+        "FIREBALL: BURNS BRICKS FOR 5S",
+        "EXTEND: WIDENS THE PADDLE",
+        "SHRINK: NARROWS THE PADDLE",
+        "SHIELD: BLOCKS BOSS ATTACKS",
+        "BARRIER: SAVES ONE LOST BALL",
+        "EXTRA LIFE: ADDS ONE LIFE",
+        "EXIT: OPENS THE RIGHT DOOR"
+    };
+    int i;
+    fill_rect(bg, 0, 0, 320, 200, COL_BG);
+    draw_box(4, 4, 312, 192);
+    draw_text(bg, 112, 12, "INSTRUCTIONS", COL_EXPL, COL_BG);
+    draw_text(bg, 16, 28, "CATCH CAPSULES WITH YOUR PADDLE", COL_LIGHT, COL_BG);
+    for (i = 0; i < PU_COUNT; i++) {
+        int y = 44 + i * 12;
+        blit(bg, 16, y, &spr_capf[i][0]);
+        draw_text(bg, 44, y, explanation[i], COL_WHITE, COL_BG);
+    }
+    draw_text(bg, 16, 156, "MOUSE OR ARROWS: MOVE PADDLE", COL_LIGHT, COL_BG);
+    draw_text(bg, 16, 166, "CLICK SPACE FIRE: LAUNCH OR SHOOT", COL_LIGHT, COL_BG);
+    draw_text(bg, 24, 184, "ESC ENTER SPACE FIRE: BACK", COL_PADDLE, COL_BG);
+    state = ST_INSTRUCTIONS;
+    state_timer = 0;
+    sync_pages();
+}
+
+static void animate_menu(u8 *buf)
+{
+    int i;
+    if (state == ST_TITLE) {
+        for (i = 0; i < 8; i++) {
+            int x = 24 + i * 34;
+            blit(buf, x, 10, &spr_capf[i][((state_timer >> 3) + i) % CAP_FR]);
+            add_dirty(back, x, 10, CAP_W, CAP_H);
+        }
+    } else if (state == ST_INSTRUCTIONS) {
+        for (i = 0; i < PU_COUNT; i++) {
+            int y = 44 + i * 12;
+            blit(buf, 16, y, &spr_capf[i][(state_timer >> 3) % CAP_FR]);
+            add_dirty(back, 16, y, CAP_W, CAP_H);
+        }
+    }
+}
 
 #ifdef TEST
 static u32 spin_max, spin_sum, spin_n, spin_min = 0xffffffffUL;
@@ -1406,8 +1470,10 @@ static void show_title(void)
         while (b + 11 - n < 8) *--n = '0';
         draw_text(bg, 164, 82 + i * 12, n, COL_WHITE, COL_DARK);
     }
-    draw_text(bg, 68, 154, "CLICK OR FIRE TO START", COL_WHITE, COL_DARK);
-    draw_text(bg, 100, 168, "ESC TO QUIT", COL_METAL, COL_DARK);
+    title_choice = 0;
+    draw_title_buttons();
+    draw_text(bg, 36, 166, "ARROWS: SELECT  I: INSTRUCTIONS", COL_METAL, COL_DARK);
+    draw_text(bg, 104, 180, "Made by Qumran", COL_LIGHT, COL_DARK);
     draw_text(bg, 4, 180, VERSION, COL_METAL, COL_DARK);
     state = ST_TITLE;
     sfx_draw_state();
@@ -1739,7 +1805,7 @@ int main(void)
     last_clock = vbl_count;
     while (state != ST_QUIT) {
         u8 *buf = scr[back];
-        int dx, fire_edge, key_ascii = 0, key_esc = 0, key_enter = 0, key_space = 0;
+        int dx, fire_edge, key_ascii = 0, key_esc = 0, key_enter = 0, key_space = 0, menu_nav = 0;
         frame_no++;
         state_timer++;
         bricks_drawn_frame = hud_drawn_frame = 0;
@@ -1752,8 +1818,10 @@ int main(void)
             while ((sc = take_key()) != 0) {
                 int scan = (int)sc;
                 if (scan == 0x01) key_esc = 1;
-                else if (scan == 0x4b) dx -= 8;                    /* left */
-                else if (scan == 0x4d) dx += 8;                    /* right */
+                else if (scan == 0x4b) { dx -= 8; menu_nav = -1; }
+                else if (scan == 0x4d) { dx += 8; menu_nav = 1; }
+                else if (scan == 0x48) menu_nav = -1;
+                else if (scan == 0x50) menu_nav = 1;
                 else if (scan == 0x39) { fire_edge = 1; key_space = 1; }
                 else if (scan == 0x1c || scan == 0x72) key_enter = 1;
                 else if (scan == 0x0e) key_ascii = 8;              /* backspace */
@@ -1767,6 +1835,10 @@ int main(void)
         }
         {
             u8 j = joy1;
+            u8 pressed = (u8)(j & ~menu_joy_prev);
+            menu_joy_prev = j;
+            if (pressed & 5) menu_nav = -1;
+            if (pressed & 10) menu_nav = 1;
             if (j & 4) dx -= 4;
             if (j & 8) dx += 4;
             if (take_click()) fire_edge = 1;
@@ -1817,15 +1889,32 @@ int main(void)
         /* ---- update ---- */
         switch (state) {
         case ST_TITLE:
+            if (menu_nav) {
+                title_choice = menu_nav > 0 ? 1 : 0;
+                draw_title_buttons();
+                sfx_play(SFX_MENUHOVER);
+            }
             if (key_esc) state = ST_QUIT;
-            else if (fire_edge && state_timer > 10) {
+            else if (key_ascii == 'I') {
                 sfx_play(SFX_MENUCLICK);
-                start_game();
+                show_instructions();
+            } else if (key_enter || key_space || (fire_edge && state_timer > 10)) {
+                sfx_play(SFX_MENUCLICK);
+                if (title_choice) show_instructions();
+                else start_game();
                 last_clock = vbl_count;
             }
 #ifdef TEST
             if (state_timer == 5 || (state_timer % 250) == 0) save_shot(scr[1 - back], "title");
 #endif
+            break;
+
+        case ST_INSTRUCTIONS:
+            if (key_esc || key_enter || key_space || (fire_edge && state_timer > 10)) {
+                sfx_play(SFX_MENUCLICK);
+                show_title();
+                last_clock = vbl_count;
+            }
             break;
 
         case ST_OVER:
@@ -1908,6 +1997,10 @@ int main(void)
             if (paddle_x > PF_X2 - paddle_w) paddle_x = PF_X2 - paddle_w;
 
             process_pending();
+            if (boss_dead_timer) {
+                boss_update();
+                goto play_hud;
+            }
 #ifdef ENEMYDEBUG
             {   /* debug: no ball, so nothing kills enemies or ends the level */
                 int k;
@@ -1932,7 +2025,7 @@ int main(void)
             } else {
                 int alive = 0;
                 if (fire_edge) fire_turrets();
-                for (i = 0; i < MAX_BALLS; i++) {
+                for (i = 0; i < MAX_BALLS && !boss_dead_timer; i++) {
                     Ball *b = &balls[i];
                     if (!b->active) continue;
                     if (move_ball(b)) b->active = 0;
@@ -1947,9 +2040,9 @@ int main(void)
                     for (i = 0; i < MAX_BALLS; i++) balls[i].active = 0;
                     alive = 0;
                 }
-                if (++frames_since_hit > 500)       /* anti-stall bend */
+                if (!boss_dead_timer && ++frames_since_hit > 500)       /* anti-stall bend */
                     for (i = 0; i < MAX_BALLS; i++) if (balls[i].active) balls[i].vy += 3;
-                if (!alive) {
+                if (!alive && !boss_dead_timer) {
                     clear_objects();
                     if (paddle_w != 28) build_paddle(28);
                     /* losing a life clears every active power-up, not just the
@@ -1971,6 +2064,7 @@ int main(void)
                     reset_ball();
                 }
             }
+            if (boss_dead_timer) goto play_hud;
             /* the countdown to the exit starts when only a few bricks are left */
             if (!exit_offered && !exit_open && !boss_active && bricks_left > 0 && bricks_left <= 3) {
                 if (exit_wait < 0) {
@@ -2040,6 +2134,7 @@ int main(void)
             if (fireball_timer) fireball_timer--;
             update_caps();
             update_bullets();
+play_hud:
             draw_boss_hud();
             draw_exit_hud();
 #ifdef TEST
@@ -2117,8 +2212,8 @@ int main(void)
 
 #ifdef PIXCHECK
         {   /* is the hardware showing the buffer we are about to draw into? */
-            u32 shown = ((u32)(*(u8 * volatile)0xff8201) << 16) | ((u32)(*(u8 * volatile)0xff8203) << 8);
-            if (shown == (u32)buf) {
+            u32 shown = video_address();
+            if (shown >= (u32)buf && shown < (u32)buf + 32000) {
                 draw_on_visible++;
                 if (draw_on_visible < 6) { log_kv("DRAWVISIBLE frame=", (u32)frame_no); log_str("\n"); }
             }
@@ -2134,6 +2229,7 @@ int main(void)
             restore_rect(buf, r->x, r->y, r->w, r->h);
         }
         ndirty[back] = 0;
+        animate_menu(buf);
         if (state == ST_PLAY || state == ST_OVER) {
             for (i = 0; i < MAX_CAPS; i++) {
                 Cap *c = &caps[i];
