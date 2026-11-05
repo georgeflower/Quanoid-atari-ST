@@ -87,8 +87,9 @@ currently being displayed. Mouse and system-timer handlers allow raster
 interrupts to preempt them.
 Some paddle-shading line artifacts can still occur under controller load.
 
-The on-screen version is the three-digit release/PR number (`005` for
-`qnoid005.st`). LEVEL and LIVES sit below a dedicated boss-HP/exit-counter
+The on-screen version is the three-digit release/PR number, with a suffix
+for revised disks. The current release is `007` (`qnoid007.st`). LEVEL and LIVES sit below a
+dedicated boss-HP/exit-counter
 slot; the four power-up lines remain above the footer.
 
 The title includes the Qumran credit and animated capsules. Select START GAME
@@ -99,9 +100,30 @@ Space or fire returns to the title.
 
 Balls freeze during the boss-defeat countdown before the existing level
 transition. The level-10 sphere returns light red in its second phase.
-Boss and enemy sprites rotate around both X and Y; spheres have smooth,
+Boss animations use 32 frames per turn. The sphere and pyramid spin around
+Y at a fixed viewing tilt, showing all four pyramid sides but not its bottom.
+The sphere has rotating shading and highlights;
+the fourth boss rotates around Z and Y. The pyramid is rendered 10% larger.
+Its phases are purple, blue, light red, orange and white (including
+resurrections); the fourth boss changes from gold to blue to light red.
+Its sprite canvas is expanded to prevent clipping during rotation.
+Spheres have smooth,
 round silhouettes without detached shading pixels.
 Run `python3 tools/test_gensprites.py` to check rotation and sphere masks.
+
+During play, `T` toggles trainer mode. Up advances one level and Down goes
+back one level (without wrapping at the first or last level). The HUD shows
+`TRAIN` while enabled and `NO HI` after switching it off. Pressing `T`
+disables high-score entry for the entire current game; starting a new game
+resets trainer mode and restores high-score eligibility.
+
+Ball movement skips empty enemy checks and brick checks outside the brick
+area or on brick-free boss levels. This reduces missed display refreshes
+without changing ball speed, collision stepping or the 50 Hz display limit.
+
+Losing a life clears boss shots, bombs, lasers and queued attacks before
+the next launch. Cross projectiles keep descending at least half a pixel
+per game frame instead of slowing to a stationary obstacle.
 
 ## Source layout
 

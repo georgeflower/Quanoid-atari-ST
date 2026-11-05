@@ -17,10 +17,11 @@
 #define BOSS_SHOT_COL 2
 #define BOSS_CROSS_COL COL_EXPL
 
-/* 28x28 shaded rotation sprites (gfxd_boss in sprites.h, 16 frames per shape).
+/* Shaded rotation sprites (gfxd_boss in sprites.h, 32 frames per shape).
    A flash recolours the body entry of the boss's shape. */
 #define BOSS_SPR 28
-static Sprite spr_boss[4][16];
+#define BOSS_FR 32
+static Sprite spr_boss[4][BOSS_FR];
 static const u8 boss_body_col[4] = { 2, 13, 4, 8 };
 static const u16 boss_body_rgb[4] = { 0x610, 0x367, 0x537, 0x760 };
 
@@ -28,10 +29,14 @@ static void build_boss_sprites(void)
 {
     int t, f;
     for (t = 0; t < 4; t++)
-        for (f = 0; f < 16; f++) {
+        for (f = 0; f < BOSS_FR; f++) {
             Sprite *sp = &spr_boss[t][f];
             sp->w = BOSS_SPR; sp->h = BOSS_SPR; sp->ng = 2; sp->cap = 280;
             sp->d = (u16 *)gfxd_boss[t][f];
+            if (t == 2) {
+                sp->w = sp->h = 44; sp->ng = 3; sp->cap = 660;
+                sp->d = (u16 *)gfxd_pyramid_boss[f];
+            }
         }
 }
 
@@ -58,7 +63,7 @@ static const BossDef boss_def[4] = {
       { 460, 820, 1000, 1000, 1000 }, 10000 },
     /* pyramid, level 15: 2 phases, 1.8/3.0 speed, 1800 ms,
        shot .25 laser .18 super .29 spiral .10 cross .18 */
-    { 24, 22, 10, 2, 2, { 145, 242, 363 }, { 90, 90, 90 },
+    { 26, 24, 10, 2, 2, { 145, 242, 363 }, { 90, 90, 90 },
       { 250, 430, 720, 820, 1000 }, 20000 },
     /* mega boss, level 20: 3 phases, 2.0/3.0/5.5 speed, 3000/2500/2000 ms */
     { 26, 24, 10, 3, 3, { 161, 242, 444 }, { 150, 125, 100 },
@@ -258,6 +263,18 @@ static void boss_pick_target(void)
     boss_ty = (s32)(PF_Y + (((int)boss_pos[p][1] * 150) >> 8)) << 8;
 }
 
+static void boss_clear_attacks(void)
+{
+    int i;
+    for (i = 0; i < BOSS_MAX_SHOTS; i++) bshot[i].active = 0;
+    if (laser_timer)
+        dirty_both(laser_x - 2, laser_y0, 5, 200 - laser_y0);
+    laser_timer = laser_warn = 0;
+    boss_warn = boss_warn_kind = 0;
+    spiral_left = spiral_timer = 0;
+    if (boss_active) boss_timer = bd->interval[boss_phase];
+}
+
 static void boss_start(int level)
 {
     int idx = level == 5 ? 0 : level == 10 ? 1 : level == 15 ? 2 : 3;
@@ -421,12 +438,13 @@ static int boss_update(void)
         Shot *s = &bshot[i];
         int x, y;
         if (!s->active) continue;
-        if (s->kind == 1) {                        /* cross: changes course, pauses */
+        if (s->kind == 1) {                        /* cross: turns without slowing its descent */
             if (++s->timer > 40) {
                 s->timer = 0;
                 if (rnd() & 1) { s->vx = -s->vx; }
-                else { s->vx = (s->vx * 3) >> 2; s->vy = (s->vy * 3) >> 2; }
+                else s->vx = (s->vx * 3) >> 2;
             }
+            if (s->vy < 128) s->vy = 128;
         }
         s->x += s->vx;
         s->y += s->vy;
@@ -453,28 +471,41 @@ int boss_ball_hit(Ball *b)
     return 1;
 }
 
+static u16 boss_phase_colour(void)
+{
+    static const u16 pyramid_rgb[5] = { 0x537, 0x367, 0x766, 0x740, 0x777 };
+    static const u16 mega_rgb[3] = { 0x760, 0x367, 0x766 };
+    if (boss_shape == 2) return pyramid_rgb[boss_phase + 3 - boss_res_left];
+    if (boss_shape == 3) return mega_rgb[boss_phase];
+    if (boss_shape == 1 && boss_phase > 0) return 0x766;
+    return boss_body_rgb[boss_shape];
+}
+
 static void boss_draw(u8 *buf)
 {
     int bx = boss_x >> 8, by = boss_y >> 8, y;
     int sx, sy;
+    int height = boss_shape == 2 ? 44 : BOSS_SPR;
+    int width = height;
     int i;
     if (!boss_active) return;
     {   /* flashes are palette changes, not colour changes */
-        u16 c = boss_shape == 1 && boss_phase > 0 ? 0x766 : boss_body_rgb[boss_shape];
+        u16 c = boss_phase_colour();
         if (boss_flash) c = 0x777;
         if (boss_dead_timer) c = (boss_dead_timer & 4) ? 0x700 : 0x777;
         else if (boss_warn && (frame_no & 2)) c = 0x740;
         ((u16 *)0xff8240)[boss_body_col[boss_shape]] = c;
     }
-    sx = bx + bd->w / 2 - BOSS_SPR / 2;
-    sy = by + bd->h / 2 - BOSS_SPR / 2;
+    sx = bx + bd->w / 2 - width / 2;
+    sy = by + bd->h / 2 - height / 2;
     if (sx < PF_X) sx = PF_X;
-    if (sx > PF_X2 - BOSS_SPR) sx = PF_X2 - BOSS_SPR;
+    if (sx > PF_X2 - width) sx = PF_X2 - width;
     if (sy < PF_Y) sy = PF_Y;
+    if (sy > 200 - height) sy = 200 - height;
 #ifndef NOBOSSBLIT
-    blit(buf, sx, sy, &spr_boss[boss_shape][(boss_angle >> 2) & 15]);
+    blit(buf, sx, sy, &spr_boss[boss_shape][(boss_angle >> 1) & (BOSS_FR - 1)]);
 #endif
-    add_dirty(back, sx, sy, BOSS_SPR, BOSS_SPR);
+    add_dirty(back, sx, sy, width, height);
 
     if (laser_warn) {                            /* warning: dotted beam */
         for (y = by + bd->h; y < 200; y += 4) pset(buf, laser_x, y, BOSS_SHOT_COL);

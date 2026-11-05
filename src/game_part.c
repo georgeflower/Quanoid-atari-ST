@@ -192,6 +192,7 @@ static u16 life_groups_used;          /* bit per level group (level / 5) */
 static int life_dropped_this_level;
 static int bricks_since_drop;
 static u32 pu_collected[PU_COUNT];
+static int trainer_mode, trainer_used;
 
 #define MAX_CAPS 6
 #define CAP_W 18
@@ -479,6 +480,13 @@ static void draw_box(int x, int y, int w, int h)
     fill_rect(bg, x + w - 1, y, 1, h, COL_LIGHT);
 }
 
+static void draw_trainer_state(void)
+{
+    draw_text(bg, PANEL_X + 48, 190, trainer_mode ? "TRAIN" : trainer_used ? "NO HI" : "     ",
+              COL_EXPL, COL_DARK);
+    dirty_both(PANEL_X + 48, 190, 40, 8);
+}
+
 static void draw_panel_labels(void)
 {
     fill_rect(bg, PANEL_X, 0, 320 - PANEL_X, 200, COL_DARK);
@@ -494,6 +502,7 @@ static void draw_panel_labels(void)
     fill_rect(bg, PANEL_X + 10, 166, 76, 1, COL_METAL);
     draw_text(bg, PANEL_X + 8, 180, "ESC=PAUSE", COL_METAL, COL_DARK);
     draw_text(bg, PANEL_X + 8, 190, VERSION, COL_METAL, COL_DARK);
+    draw_trainer_state();
     draw_text(bg, PANEL_X + 8, 170, sfx_enabled ? "S=SFX ON " : "S=SFX OFF", COL_METAL, COL_DARK);
     hud_fire = hud_turret = hud_barrier = hud_shield = -1;
 }
@@ -862,6 +871,8 @@ static void clear_objects(void)
     int i;
     for (i = 0; i < MAX_CAPS; i++) caps[i].active = 0;
     for (i = 0; i < MAX_BULLETS; i++) bullets[i].active = 0;
+    for (i = 0; i < MAX_BOMBS; i++) bombs[i].active = 0;
+    boss_clear_attacks();
 }
 
 static void load_level(int idx)
@@ -888,6 +899,7 @@ static void load_level(int idx)
     }
     raster_build();
     boss_active = 0;
+    boss_dead_timer = 0;
     boss_hp_shown = -1;
     exit_open = 0;
     exit_offered = 0;
@@ -1388,6 +1400,7 @@ static void show_instructions(void)
     }
     draw_text(bg, 16, 156, "MOUSE OR ARROWS: MOVE PADDLE", COL_LIGHT, COL_BG);
     draw_text(bg, 16, 166, "CLICK SPACE FIRE: LAUNCH OR SHOOT", COL_LIGHT, COL_BG);
+    draw_text(bg, 16, 176, "T TRAINER  UP DOWN LEVELS  NO HI", COL_LIGHT, COL_BG);
     draw_text(bg, 24, 184, "ESC ENTER SPACE FIRE: BACK", COL_PADDLE, COL_BG);
     state = ST_INSTRUCTIONS;
     state_timer = 0;
@@ -1489,6 +1502,7 @@ static void start_game(void)
     lives = 3;
 #endif
     score = 0;
+    trainer_mode = trainer_used = 0;
     life_groups_used = 0;
     turret_shots = 0;
     has_shield = 0;
@@ -1805,7 +1819,7 @@ int main(void)
     last_clock = vbl_count;
     while (state != ST_QUIT) {
         u8 *buf = scr[back];
-        int dx, fire_edge, key_ascii = 0, key_esc = 0, key_enter = 0, key_space = 0, menu_nav = 0;
+        int dx, fire_edge, key_ascii = 0, key_esc = 0, key_enter = 0, key_space = 0, menu_nav = 0, level_nav = 0;
         frame_no++;
         state_timer++;
         bricks_drawn_frame = hud_drawn_frame = 0;
@@ -1820,8 +1834,8 @@ int main(void)
                 if (scan == 0x01) key_esc = 1;
                 else if (scan == 0x4b) { dx -= 8; menu_nav = -1; }
                 else if (scan == 0x4d) { dx += 8; menu_nav = 1; }
-                else if (scan == 0x48) menu_nav = -1;
-                else if (scan == 0x50) menu_nav = 1;
+                else if (scan == 0x48) { menu_nav = -1; level_nav = 1; }
+                else if (scan == 0x50) { menu_nav = 1; level_nav = -1; }
                 else if (scan == 0x39) { fire_edge = 1; key_space = 1; }
                 else if (scan == 0x1c || scan == 0x72) key_enter = 1;
                 else if (scan == 0x0e) key_ascii = 8;              /* backspace */
@@ -1919,7 +1933,7 @@ int main(void)
 
         case ST_OVER:
             if ((fire_edge && state_timer > 50) || state_timer > 200) {
-                int r = hi_rank(score);
+                int r = trainer_used ? -1 : hi_rank(score);
                 if (r >= 0) { show_entry(r); sfx_play(SFX_WIN); } else show_title();
                 last_clock = vbl_count;
             }
@@ -1992,6 +2006,25 @@ int main(void)
 
         case ST_PLAY:
             if (key_esc) { show_pause(); last_clock = vbl_count; break; }
+            if (key_ascii == 'T') {
+                trainer_mode ^= 1;
+                trainer_used = 1;
+                draw_trainer_state();
+                sfx_play(SFX_MENUCLICK);
+            }
+            if (trainer_mode && level_nav) {
+                int next = level_idx + level_nav;
+                if (next >= 0 && next < NUM_LEVELS) {
+                    load_level(next);
+                    sync_pages();
+                    last_clock = vbl_count;
+                    state_timer = 0;
+#ifdef TEST
+                    level_frames = 0;
+#endif
+                    break;
+                }
+            }
             paddle_x += dx;
             if (paddle_x < PF_X) paddle_x = PF_X;
             if (paddle_x > PF_X2 - paddle_w) paddle_x = PF_X2 - paddle_w;
