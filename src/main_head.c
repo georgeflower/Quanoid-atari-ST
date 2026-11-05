@@ -162,11 +162,12 @@ static u8 *alloc_screen(void)
     return (u8 *)p;
 }
 
+extern u8 * volatile pending_screen;
+
 static void show_buffer(u8 *b)
 {
-    u32 a = (u32)b;
-    *(u8 *)0xff8201 = (u8)(a >> 16);
-    *(u8 *)0xff8203 = (u8)(a >> 8);
+    __asm__ volatile ("" ::: "memory");
+    pending_screen = b;
 }
 
 static void raster_build(void);
@@ -268,4 +269,3 @@ static void dirty_both(int x, int y, int w, int h)
     add_dirty(0, x, y, w, h);
     add_dirty(1, x, y, w, h);
 }
-

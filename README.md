@@ -78,6 +78,11 @@ TOS/EmuTOS ROM:
 hatari --tos /path/to/tos.img --auto build/QUANOID.PRG
 ```
 
+Video uses the standard 320x200 display, without overscan. The space
+background and hardware border are black; brick and paddle shading still use
+raster colours. Page flips are acknowledged by the VBL handler, and raster
+tables are built separately from the table currently being displayed.
+
 ## Source layout
 
 - `src/main_head.c` — core types, system-call wrappers, screen/sprite
