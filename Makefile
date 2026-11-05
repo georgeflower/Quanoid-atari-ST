@@ -95,3 +95,10 @@ build/main_microbench.o: src/main.c src/levels.h src/sprites.h src/font.h src/sf
 build/QMICRO.PRG: build/main_microbench.elf
 	sh tools/checkalign.sh $<
 	python3 tools/elf2prg.py $< $@
+
+# exit-door bot (see tools/exitbot.sh); EXITBOT_FLAGS picks the scenario
+build/main_exitbot.o: src/main.c src/levels.h src/sprites.h src/font.h src/sfx.h
+	$(CC) $(CFLAGS) -DTEST -DNO_AUTOPILOT -DEXITBOT -DTEST_FRAMES_PER_LEVEL=60000 -DTEST_TOTAL_FRAMES=100000 $(EXITBOT_FLAGS) -c $< -o $@
+build/QEXITBOT.PRG: build/main_exitbot.elf
+	sh tools/checkalign.sh $<
+	python3 tools/elf2prg.py $< $@
