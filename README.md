@@ -16,6 +16,29 @@ and the bootable floppy image [`QNOID.st`](releases/QNOID.st). The same
 folder also contains the numbered QNOID release disks (including revisions)
 and the earlier QUANOID v2.8 executable and disk image.
 
+## Screenshots
+
+Captured from the final release at 2x the native 320x200 resolution.
+Trainer mode was used to reach the boss and enemy levels.
+
+| Main menu | Instructions |
+|---|---|
+| ![Main menu with high scores and no version label](docs/screenshots/main-menu.png) | ![Instructions with power-up capsules and controls](docs/screenshots/instructions.png) |
+
+| Gameplay | Enemies |
+|---|---|
+| ![Level 1 gameplay with the ball in flight](docs/screenshots/gameplay.png) | ![Cube, sphere and star enemies on level 9](docs/screenshots/enemies.png) |
+
+### Bosses
+
+| Cube - level 5 | Sphere - level 10 |
+|---|---|
+| ![Cube boss fight on level 5](docs/screenshots/boss-cube.png) | ![Sphere boss fight on level 10](docs/screenshots/boss-sphere.png) |
+
+| Pyramid - level 15 | Mega boss - level 20 |
+|---|---|
+| ![Pyramid boss fight on level 15](docs/screenshots/boss-pyramid.png) | ![Mega boss fight on level 20](docs/screenshots/boss-mega.png) |
+
 ## Gameplay
 
 - **Bricks**: standard, multi-hit (shown with pip dots for hits remaining),
@@ -91,8 +114,9 @@ currently being displayed. Mouse and system-timer handlers allow raster
 interrupts to preempt them.
 Some paddle-shading line artifacts can still occur under controller load.
 
-The on-screen version identifies the release or pull request build, with a
-suffix for revised disks. See the filenames in [`releases/`](releases/) for
+The in-game HUD version identifies the release or pull request build, with a
+suffix for revised disks; the main menu has no version label.
+See the filenames in [`releases/`](releases/) for
 the release builds included in this repository. LEVEL and LIVES sit below a
 dedicated boss-HP/exit-counter slot; the four power-up lines remain above the
 footer.
