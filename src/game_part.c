@@ -200,7 +200,7 @@ static int trainer_mode, trainer_used;
 typedef struct { s16 x; s32 y; u8 type, active; s8 pair; } Cap;
 static Cap caps[MAX_CAPS];
 
-static int exit_open, exit_offered, exit_wait, life_lost_level;
+static int exit_open, exit_offered, exit_wait;
 static int hud_exit_shown = -1;
 #ifdef TEST
 static int exit_caps_seen;
@@ -904,7 +904,6 @@ static void load_level(int idx)
     exit_offered = 0;
     exit_wait = -1;
     hud_exit_shown = -1;
-    life_lost_level = 0;
     if (level_is_boss[idx]) {
         boss_start(idx + 1);
         bricks_left = 1;            /* the level ends when the boss dies */
@@ -1202,6 +1201,9 @@ static void detonate(int i)
 /* returns 1 if the brick was removed */
 int damage_brick(int i, Ball *b, int fire)
 {
+#ifdef EXITBOT
+    if (exit_wait >= 0 && !exit_open) { sfx_play(SFX_BOUNCE); return 0; }  /* make the bot wait */
+#endif
     if (cell_type[i] == B_METAL) { sfx_play(SFX_BOUNCE); return 0; }
     if (cell_type[i] == B_CRACK && !fire) {
         sfx_play(cell_hits[i] >= 3 ? SFX_CRACK3 : cell_hits[i] == 2 ? SFX_CRACK2 : SFX_CRACK1);
@@ -1707,6 +1709,131 @@ static void run_microbench(void)
 }
 #endif
 
+#ifdef EXITBOT
+/* Exit-door bot (TEST builds only). Plays the level for real, then once the
+   60 s exit countdown starts the last bricks are made unbreakable so the bot
+   has to sit the countdown out, catch the "?" capsule, check the door opened
+   on the right in line with the paddle, and leave through it.
+     EXITBOT_DIE=n    lose a life n seconds into the countdown
+     EXITBOT_MISSCAP  let the first "?" capsule fall past the paddle
+   Every run ends with an "EXITBOT PASS" or "EXITBOT FAIL" line. */
+static int exitbot_pix(const u8 *s, int x, int y)
+{
+    const u16 *w = (const u16 *)s + y * 80 + (x >> 4) * 4;
+    int b = 15 - (x & 15), p, c = 0;
+    for (p = 0; p < 4; p++) c |= ((w[p] >> b) & 1) << p;
+    return c;
+}
+
+static void exitbot_end(const char *verdict)
+{
+    log_str("EXITBOT "); log_str(verdict);
+    log_kv(" level=", (u32)level_idx + 1);
+    log_str("\n");
+    state = ST_QUIT;
+}
+
+static void exitbot(int *dx, int *fire_edge)
+{
+    static u16 lfsr = 0x1d2b;
+    static int aim, start_level = -1, cd, cap_seen, cap_missed, door_t, out, died, prev_lives = -1, ticks;
+    int i, k, cap = -1, hw = paddle_w / 2;
+    Ball *t = 0;
+    s32 best = -1;
+
+    ticks++;
+    if (state == ST_TITLE) { if ((state_timer & 31) == 0) *fire_edge = 1; return; }
+    if (state == ST_CLEAR) {
+        if (!exit_open) exitbot_end("FAIL level cleared without using the exit");
+        else if (!out) { out = 1; log_str("EXITBOT walked out through the exit, level complete\n"); }
+        return;
+    }
+    if (state != ST_PLAY) return;
+    if (start_level < 0) start_level = level_idx;
+    if (level_idx != start_level) {
+        exitbot_end(out ? "PASS walked out through the exit, next level loaded" : "FAIL level changed unexpectedly");
+        return;
+    }
+    if (prev_lives >= 0 && lives < prev_lives) {
+        log_kv("EXITBOT life lost, countdown_s=", (u32)cd / 50);
+        log_kv(" exit_wait=", (u32)exit_wait); log_str("\n");
+    }
+    prev_lives = lives;
+
+    for (i = 0; i < MAX_BALLS; i++)
+        if (balls[i].active && balls[i].y > best) { best = balls[i].y; t = &balls[i]; }
+    for (k = 0; k < MAX_CAPS; k++) if (caps[k].active && caps[k].type == PU_EXIT) cap = k;
+
+    if (t && t->vy < 0 && (ticks & 15) == 0) {
+        lfsr = (u16)((lfsr >> 1) ^ (-(lfsr & 1) & 0xb400));
+        aim = (int)(lfsr % (2 * (hw - 3) + 1)) - (hw - 3);
+    }
+    if (aim > hw - 3) aim = hw - 3;
+    if (aim < 3 - hw) aim = 3 - hw;
+    if (t) *dx = (int)(t->x >> 8) + 2 - hw + aim - paddle_x;
+    if (ball_stuck && (state_timer % 50) == 25) *fire_edge = 1;
+
+    if (exit_wait >= 0 && !exit_open) {
+        if (cd == 0) {
+            log_kv("EXITBOT countdown started bricks_left=", (u32)bricks_left); log_str("\n");
+            if (exitbot_pix(bg, PF_X2 + 2, EXIT_Y + 4) != COL_LIGHT) exitbot_end("FAIL door not closed before the capsule");
+        }
+        cd++;
+        if ((cd % 500) == 0) {
+            log_kv("EXITBOT t=", (u32)cd / 50);
+            log_kv("exit_wait=", (u32)exit_wait);
+            log_kv("offered=", (u32)exit_offered);
+            log_kv("lives=", (u32)lives);
+            log_kv("bricks_left=", (u32)bricks_left); log_str("\n");
+        }
+#ifdef EXITBOT_DIE
+        if (!died && cd >= EXITBOT_DIE * 50 && t && !ball_stuck) {
+            *dx = (int)(t->x >> 8) < (PF_X + PF_X2) / 2 ? PF_X2 - paddle_x : PF_X - paddle_x;
+            if (!cap_seen && (cd % 50) == 0) log_str("EXITBOT dodging the ball on purpose\n");
+        }
+        if (lives < 99) died = 1;
+#endif
+        if (cd > (60 + 45) * 50) { exitbot_end("FAIL no exit capsule caught 105 s after the countdown started"); return; }
+    }
+
+    if (cap >= 0) {
+        int cy = (int)(caps[cap].y >> 8), cx = caps[cap].x + CAP_W / 2;
+        if (!cap_seen) {
+            cap_seen = 1;
+            log_kv("EXITBOT exit capsule spawned countdown_s=", (u32)cd / 50);
+            log_kv(" x=", (u32)cx); log_kv("y=", (u32)cy); log_str("\n");
+        }
+#ifdef EXITBOT_MISSCAP
+        if (!cap_missed && cy > 160) *dx = cx < (PF_X + PF_X2) / 2 ? PF_X2 - paddle_x : PF_X - paddle_x;
+        else
+#endif
+        if (cy > 90 && (!t || t->vy < 0 || (int)(t->y >> 8) < 120)) *dx = cx - hw - paddle_x;
+    } else if (cap_seen && !exit_open) {
+        cap_seen = 0;           /* gone without being caught: the timer re-arms */
+        cap_missed = 1;
+        log_kv("EXITBOT exit capsule lost countdown_s=", (u32)cd / 50);
+        log_kv(" exit_wait=", (u32)exit_wait); log_str("\n");
+    }
+
+    if (exit_open) {
+        door_t++;
+        if (door_t == 1) {
+            log_kv("EXITBOT exit open countdown_s=", (u32)cd / 50); log_str("\n");
+            if (exitbot_pix(bg, PF_X2 + 2, EXIT_Y + 4) == COL_BG && exitbot_pix(bg, PF_X2, EXIT_Y + 4) == COL_EXPL
+                && exitbot_pix(bg, PF_X2 + 2, EXIT_Y) == COL_EXPL && exitbot_pix(bg, PF_X2 + 2, EXIT_Y + EXIT_H - 1) == COL_EXPL
+                && EXIT_Y < PAD_Y + PAD_H && EXIT_Y + EXIT_H > PAD_Y)
+                log_str("EXITBOT door drawn open on the right wall, in line with the paddle\n");
+            else
+                exitbot_end("FAIL exit door not drawn on the right wall");
+        }
+        if (door_t == 30) save_shot(scr[1 - back], "exitbot door open");
+        if (door_t > 30) *dx = 4;   /* stroll to the door */
+        if (door_t > 400) exitbot_end("FAIL paddle never got out through the open door");
+    }
+    (void)died; (void)cap_missed;
+}
+#endif
+
 int main(void)
 {
     long ssp = sup_on();
@@ -1891,6 +2018,9 @@ int main(void)
             if (state == ST_ENTRY && (state_timer % 40) == 0) key_enter = 1;
             if (state == ST_ENTRY) { key_ascii = 0; fire_edge = (state_timer % 20) == 0; if (state_timer == 5) key_ascii = 'T'; }
         }
+#endif
+#ifdef EXITBOT
+        exitbot(&dx, &fire_edge);
 #endif
 
         /* ---- update ---- */
@@ -2078,7 +2208,6 @@ int main(void)
                     turret_shots = 0;
                     has_shield = 0;
                     if (has_barrier) { has_barrier = 0; draw_barrier(); }
-                    life_lost_level = 1;
                     if (--lives <= 0) {
                         lives = 0;
                         draw_hud();
@@ -2113,7 +2242,15 @@ int main(void)
 #ifdef CLEARTEST
             if (level_frames == 500) bricks_left = 0;
 #endif
-            if (!exit_offered && !exit_open && !life_lost_level && exit_wait == 0) {
+            if (exit_offered && !exit_open) {
+                int k, live = 0;
+                for (k = 0; k < MAX_CAPS; k++) if (caps[k].active && caps[k].type == PU_EXIT) live = 1;
+                if (!live) {          /* missed, or cleared with a lost life: offer it again soon */
+                    exit_offered = 0;
+                    exit_wait = 10 * 50;
+                }
+            }
+            if (!exit_offered && !exit_open && exit_wait == 0) {
                 int fc = free_cap();
                 if (fc < 0) {
                     exit_wait = 25;    /* every capsule slot is full: try again in .5 s */
