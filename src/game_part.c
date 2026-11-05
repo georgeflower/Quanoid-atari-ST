@@ -1482,7 +1482,6 @@ static void show_title(void)
     draw_title_buttons();
     draw_text(bg, 36, 166, "ARROWS: SELECT  I: INSTRUCTIONS", COL_METAL, COL_DARK);
     draw_text(bg, 104, 180, "Made by Qumran", COL_LIGHT, COL_DARK);
-    draw_text(bg, 4, 180, VERSION, COL_METAL, COL_DARK);
     state = ST_TITLE;
     sfx_draw_state();
     sync_pages();
