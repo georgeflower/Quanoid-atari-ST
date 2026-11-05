@@ -12,6 +12,11 @@ physics, power-ups, enemies, bosses, pause, high-score entry, and a
 level-complete/exit-door mechanic. Available release executables and floppy
 images are in [`releases/`](releases/).
 
+The latest final release is available as [`QNOID.PRG`](releases/QNOID.PRG)
+and the bootable floppy image [`QNOID.st`](releases/QNOID.st). The same
+folder also contains the numbered QNOID release disks (including revisions)
+and the earlier QUANOID v2.8 executable and disk image.
+
 ## Gameplay
 
 - **Bricks**: standard, multi-hit (shown with pip dots for hits remaining),

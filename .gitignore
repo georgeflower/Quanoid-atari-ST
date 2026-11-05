@@ -10,3 +10,6 @@ build/
 *.log
 src/main.c
 !releases/*.PRG
+!releases/*.prg
+!releases/*.ST
+!releases/*.st
