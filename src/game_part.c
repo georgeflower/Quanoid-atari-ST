@@ -1051,7 +1051,7 @@ static const u8 pu_sound[PU_COUNT] = {
     SFX_PU_SHRINK, SFX_PU_SHIELD, SFX_PU_BARRIER, SFX_PU_LIFE, SFX_PU_MULTI
 };
 
-static void apply_power(int t)
+void apply_power(int t)
 {
     int i;
     pu_collected[t]++;
@@ -1122,27 +1122,17 @@ static void apply_power(int t)
     if (paddle_x > PF_X2 - paddle_w) paddle_x = PF_X2 - paddle_w;
 }
 
-static void update_caps(void)
+void caps_update(Cap *list, const int *px, const int *pw);
+
+void caps_missed(int type, int x, int px, int pw)
 {
-    int i;
-    for (i = 0; i < MAX_CAPS; i++) {
-        Cap *c = &caps[i];
-        int y;
-        if (!c->active) continue;
-        c->y += 192;                       /* 0.75 px/frame */
-        y = (int)(c->y >> 8);
-        if (y >= 200 - CAP_H) {
 #ifdef TEST
-            log_kv("CAPTEST missed type=", (u32)c->type); log_kv("cx=", (u32)c->x); log_kv("px=", (u32)paddle_x); log_kv("pw=", (u32)paddle_w); log_str("\n");
+    log_kv("CAPTEST missed type=", (u32)type);
+    log_kv("cx=", (u32)x);
+    log_kv("px=", (u32)px);
+    log_kv("pw=", (u32)pw);
+    log_str("\n");
 #endif
-            c->active = 0; continue; }
-        if (y + CAP_H > PAD_Y && y < PAD_Y + PAD_H &&
-            c->x + CAP_W > paddle_x && c->x < paddle_x + paddle_w) {
-            c->active = 0;
-            if (c->pair >= 0) caps[(int)c->pair].active = 0;
-            apply_power(c->type);
-        }
-    }
 }
 
 /* ---- bricks ---- */
@@ -1246,15 +1236,20 @@ static int cell_at(int px, int py)
 int box_hit(int x, int y);
 int move_ball(Ball *b);
 int boss_ball_hit(Ball *b);
+int enemy_bullet_hit(int bx, int by);
 void enemy_hurt(int i);
 
 /* the constants hard-coded in gfx2.S */
 _Static_assert(PF_X == 8 && PF_X2 == 216 && PF_Y == 8 && BR_Y == 16, "gfx2.S playfield");
 _Static_assert(BCOLS == 13 && BROWS == 14 && BALL_S == 4, "gfx2.S bricks");
 _Static_assert(NSTARS == 12 && PF_Y + 190 == 198, "gfx3.S stars");
-_Static_assert(PAD_Y == 184 && BARRIER_Y == 196 && MAX_DIRTY == 96, "gfx2.S layout");
+_Static_assert(PAD_Y == 184 && PAD_H == 6 && BARRIER_Y == 196 && MAX_DIRTY == 96, "gfx2.S layout");
 _Static_assert(sizeof(dirty[0]) == 96 * 8, "gfx2.S dirty list");
 _Static_assert(MAX_ENEMIES == 3 && ENEMY_SIZE == 12, "gfx2.S enemies");
+_Static_assert(MAX_CAPS == 6 && CAP_W == 18 && CAP_H == 8, "gfx2.S capsules");
+_Static_assert(sizeof(Cap) == 10 && __builtin_offsetof(Cap, y) == 2 &&
+               __builtin_offsetof(Cap, type) == 6 && __builtin_offsetof(Cap, active) == 7 &&
+               __builtin_offsetof(Cap, pair) == 8, "gfx2.S Cap");
 _Static_assert(sizeof(Enemy) == 24 && __builtin_offsetof(Enemy, active) == 16 &&
                __builtin_offsetof(Enemy, x) == 0 && __builtin_offsetof(Enemy, y) == 4, "gfx2.S Enemy");
 _Static_assert(__builtin_offsetof(Ball, x) == 0 && __builtin_offsetof(Ball, y) == 4 &&
@@ -2165,7 +2160,7 @@ int main(void)
                 reset_ball();
             }
             if (fireball_timer) fireball_timer--;
-            update_caps();
+            caps_update(caps, &paddle_x, &paddle_w);
             update_bullets();
 play_hud:
             draw_boss_hud();

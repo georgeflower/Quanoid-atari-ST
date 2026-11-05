@@ -6,6 +6,23 @@ import gensprites
 
 
 class RotationTests(unittest.TestCase):
+    def test_pyramid_enemy_rotates_only_around_y(self):
+        angles = []
+
+        def scene(yaw, pitch, x, y, roll=0):
+            angles.append((yaw, pitch, roll))
+            return None
+
+        with patch.object(gensprites, "make_scene",
+                          return_value=(scene, -0.42, math.pi / 2)):
+            gensprites.frames_for("pyramid", 1, 8, 1)
+        angles = angles[::16]
+        self.assertEqual(len(angles), 8)
+        self.assertEqual(len({yaw for yaw, pitch, roll in angles}), 8)
+        self.assertEqual({pitch for yaw, pitch, roll in angles}, {-0.42})
+        self.assertEqual({roll for yaw, pitch, roll in angles}, {0})
+        self.assertAlmostEqual(angles[1][0] - angles[0][0], math.pi / 16)
+
     def test_pyramid_boss_scale_and_unclipped_frames(self):
         with patch.object(gensprites, "render", wraps=gensprites.render) as renderer:
             frames = gensprites.pyramid_boss_frames()

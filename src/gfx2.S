@@ -1,5 +1,5 @@
 | Hot per-frame routines moved out of C: rectangle fill, text, the dirty
-| rectangle list, brick/enemy/boss hit tests and the ball stepper.
+| rectangle list, capsule motion, brick/enemy/boss hit tests and the ball stepper.
 | All follow the m68k C ABI: args on the stack, d0/d1/a0/a1 scratch,
 | d2-d7/a2-a6 preserved. The constants below must match main.c; main.c
 | has _Static_asserts for every one of them.
@@ -18,7 +18,16 @@
 	.equ	ENEMY_SIZE, 12
 	.equ	ENEMY_STRIDE, 24
 	.equ	ENEMY_ACTIVE, 16
+	.equ	MAX_CAPS, 6
+	.equ	CAP_W, 18
+	.equ	CAP_H, 8
+	.equ	CAP_STRIDE, 10
+	.equ	CAP_Y, 2
+	.equ	CAP_TYPE, 6
+	.equ	CAP_ACTIVE, 7
+	.equ	CAP_PAIR, 8
 	.equ	B_METAL, 2
+	.equ	PAD_H, 6
 	.equ	SFX_BOUNCE, 0
 	.equ	SFX_BARRIERSAVE, 11
 
@@ -396,6 +405,125 @@ es_next:
 	moveq	#-1,%d0
 es_hit:
 	movem.l	(%sp)+,%d2-%d5
+	rts
+
+| int enemy_bullet_hit(int bx, int by)
+| Checks a 2x4 bullet against the active enemy boxes.
+	.globl	enemy_bullet_hit
+enemy_bullet_hit:
+	movem.l	%d2-%d6/%a2,-(%sp)
+	move.l	28(%sp),%d4		| bx
+	move.l	32(%sp),%d5		| by
+	lea	enemies,%a2
+	moveq	#0,%d2
+	moveq	#MAX_ENEMIES-1,%d3
+eb_loop:
+	tst.b	ENEMY_ACTIVE(%a2)
+	beq.s	eb_next
+	move.l	(%a2),%d0
+	asr.l	#8,%d0			| ex
+	move.l	4(%a2),%d1
+	asr.l	#8,%d1			| ey
+	move.l	%d4,%d6
+	addq.l	#2,%d6
+	cmp.l	%d0,%d6
+	ble.s	eb_next
+	move.l	%d0,%d6
+	add.l	#ENEMY_SIZE,%d6
+	cmp.l	%d6,%d4
+	bge.s	eb_next
+	move.l	%d5,%d6
+	addq.l	#4,%d6
+	cmp.l	%d1,%d6
+	ble.s	eb_next
+	move.l	%d1,%d6
+	add.l	#ENEMY_SIZE,%d6
+	cmp.l	%d6,%d5
+	bge.s	eb_next
+	move.l	%d2,-(%sp)
+	jsr	enemy_hurt
+	addq.l	#4,%sp
+	moveq	#1,%d0
+	movem.l	(%sp)+,%d2-%d6/%a2
+	rts
+eb_next:
+	lea	ENEMY_STRIDE(%a2),%a2
+	addq.l	#1,%d2
+	dbra	%d3,eb_loop
+	moveq	#0,%d0
+	movem.l	(%sp)+,%d2-%d6/%a2
+	rts
+
+| void caps_update(Cap *caps, const int *paddle_x, const int *paddle_w)
+| Advances falling capsules and handles misses and paddle catches.
+	.globl	caps_update
+caps_update:
+	movem.l	%d2-%d6/%a2-%a4,-(%sp)
+	move.l	36(%sp),%a2		| caps
+	move.l	40(%sp),%a3		| &paddle_x
+	move.l	44(%sp),%a4		| &paddle_w
+	moveq	#MAX_CAPS-1,%d2
+cu_loop:
+	tst.b	CAP_ACTIVE(%a2)
+	beq	cu_next
+	add.l	#192,CAP_Y(%a2)		| y += 0.75 px
+	move.l	CAP_Y(%a2),%d3
+	asr.l	#8,%d3			| integer y
+	move.l	(%a3),%d4
+	move.l	(%a4),%d5
+	cmp.l	#200-CAP_H,%d3
+	blt.s	cu_catch
+	moveq	#0,%d0
+	move.b	CAP_TYPE(%a2),%d0
+	move.l	%d5,-(%sp)
+	move.l	%d4,-(%sp)
+	move.w	(%a2),%d1		| x
+	ext.l	%d1
+	move.l	%d1,-(%sp)
+	move.l	%d0,-(%sp)
+	jsr	caps_missed
+	lea	16(%sp),%sp
+	clr.b	CAP_ACTIVE(%a2)
+	bra.s	cu_next
+cu_catch:
+	move.l	%d3,%d0
+	add.l	#CAP_H,%d0
+	cmp.l	#PAD_Y,%d0
+	ble.s	cu_next
+	cmp.l	#PAD_Y+PAD_H,%d3
+	bge.s	cu_next
+	move.w	(%a2),%d0
+	ext.l	%d0
+	add.l	#CAP_W,%d0
+	cmp.l	%d4,%d0
+	ble.s	cu_next
+	move.w	(%a2),%d0
+	ext.l	%d0
+	move.l	%d4,%d1
+	add.l	%d5,%d1
+	cmp.l	%d1,%d0
+	bge.s	cu_next
+	clr.b	CAP_ACTIVE(%a2)
+	moveq	#0,%d0
+	move.b	CAP_PAIR(%a2),%d0
+	ext.w	%d0
+	ext.l	%d0
+	tst.l	%d0
+	bmi.s	cu_apply
+	mulu.w	#CAP_STRIDE,%d0
+	move.l	36(%sp),%a0
+	adda.l	%d0,%a0
+	clr.b	CAP_ACTIVE(%a0)
+cu_apply:
+	moveq	#0,%d6
+	move.b	CAP_TYPE(%a2),%d6
+	move.l	%d6,-(%sp)
+	jsr	apply_power
+	addq.l	#4,%sp
+cu_next:
+	lea	CAP_STRIDE(%a2),%a2
+	dbra	%d2,cu_loop
+	movem.l	(%sp)+,%d2-%d6/%a2-%a4
 	rts
 
 | int ball_box(int x, int y, int bx, int by, int w, int h)

@@ -199,22 +199,6 @@ void enemy_hurt(int i)
     else sfx_play(SFX_ENEMYHIT);
 }
 
-static int enemy_bullet_hit(int bx, int by)
-{
-    int i;
-    for (i = 0; i < MAX_ENEMIES; i++) {
-        Enemy *e = &enemies[i];
-        int ex, ey;
-        if (!e->active) continue;
-        ex = (int)(e->x >> 8); ey = (int)(e->y >> 8);
-        if (bx + 2 <= ex || bx >= ex + ENEMY_SIZE || by + 4 <= ey || by >= ey + ENEMY_SIZE) continue;
-        if (--e->hits == 0) enemy_kill(e);
-        else sfx_play(SFX_ENEMYHIT);
-        return 1;
-    }
-    return 0;
-}
-
 /* 12x12 shaded, dithered rotation sprites (gfxd_enemy in sprites.h, 8 frames
    per shape). Tones are outline, shadow, body, highlight; the table maps
    them to palette entries: cube red, sphere light blue, pyramid purple

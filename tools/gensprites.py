@@ -262,6 +262,10 @@ def emit_words(f, name, dims, data):
 
 def frames_for(kind, size, frames, scale):
     scene, pitch, period = make_scene(kind)
+    if kind == "pyramid":
+        def animated(yaw, tilt, x, y):
+            return scene(yaw, pitch, x, y)
+        return render(size, animated, frames, scale, pitch, period)
     return render(size, scene, frames, scale, pitch, period, dither=kind != "sphere")
 
 BOSS_FRAMES = 32

@@ -103,6 +103,7 @@ Balls freeze during the boss-defeat countdown before the existing level
 transition. The level-10 sphere returns light red in its second phase.
 Boss animations use 32 frames per turn. The sphere and pyramid spin around
 Y at a fixed viewing tilt, showing all four pyramid sides but not its bottom.
+The small pyramid enemy also spins around Y at a fixed viewing tilt.
 The sphere has rotating shading and highlights;
 the fourth boss rotates around Z and Y. The pyramid is rendered 10% larger.
 Its phases are purple, blue, light red, orange and white (including
@@ -137,8 +138,9 @@ per game frame instead of slowing to a stationary obstacle.
   tables for fast blitting
 - `src/ikbd.S` — custom IKBD + Timer C interrupt handler (own mouse/
   keyboard/joystick and sound timing, independent of TOS's own vectors)
-- `src/blitfast.S`, `src/gfx.S`, `src/math.S`, `src/sys.S`, `src/crt0.S` —
-  assembly blitter, line/rect drawing, 68000-safe math, syscalls, startup
+- `src/blitfast.S`, `src/gfx.S`, `src/gfx2.S`, `src/gfx3.S`, `src/math.S`,
+  `src/sys.S`, `src/crt0.S` — assembly blitters, capsule motion, collision
+  and ball stepping, line/rect drawing, 68000-safe math, syscalls, startup
 
 ## Hardware requirements
 
