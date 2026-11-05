@@ -460,7 +460,7 @@ static void boss_draw(u8 *buf)
     int i;
     if (!boss_active) return;
     {   /* flashes are palette changes, not colour changes */
-        u16 c = boss_body_rgb[boss_shape];
+        u16 c = boss_shape == 1 && boss_phase > 0 ? 0x766 : boss_body_rgb[boss_shape];
         if (boss_flash) c = 0x777;
         if (boss_dead_timer) c = (boss_dead_timer & 4) ? 0x700 : 0x777;
         else if (boss_warn && (frame_no & 2)) c = 0x740;

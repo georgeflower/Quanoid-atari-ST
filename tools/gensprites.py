@@ -124,19 +124,20 @@ def sphere_hit(yaw, pitch, x, y, r, stripes=True):
         nx, nz = n[0] * c + nz * s, -n[0] * s + nz * c
         lon = math.atan2(nx, nz)
         if abs(math.sin(lon * 2)) < 0.34:
-            b = max(0.0, b - 0.42)
+            b = max(0.0, b - 0.18)
         lat = math.asin(max(-1, min(1, ny)))
         if abs(lat) < 0.16:
-            b = max(0.0, b - 0.35)
+            b = max(0.0, b - 0.15)
     return z, min(1.0, b + 0.9 * spec)
 
 
-def render(size, scene, frames, scale, pitch, period, outline=True):
-    """scene(yaw, x, y) -> (z, brightness) or None; returns list of frames."""
+def render(size, scene, frames, scale, pitch, period, outline=True, dither=True):
+    """scene(yaw, pitch, x, y) -> (z, brightness) or None; returns frames."""
     out = []
     half = size / 2.0
     for f in range(frames):
         yaw = period * f / frames
+        tilt = pitch + 2 * math.pi * f / frames
         cover = [[0] * size for _ in range(size)]
         light = [[0.0] * size for _ in range(size)]
         for py in range(size):
@@ -147,7 +148,7 @@ def render(size, scene, frames, scale, pitch, period, outline=True):
                     for sx in range(4):
                         x = (px + (sx + 0.5) / 4 - half) / scale
                         y = (py + (sy + 0.5) / 4 - half) / scale
-                        h = scene(yaw, pitch, x, y)
+                        h = scene(yaw, tilt, x, y)
                         if h:
                             n += 1
                             acc += h[1]
@@ -170,6 +171,9 @@ def render(size, scene, frames, scale, pitch, period, outline=True):
                         row += "0"
                         continue
                 p = 1 + light[py][px] * 2.0
+                if not dither:
+                    row += str(max(1, min(3, round(p))))
+                    continue
                 lo = int(p)
                 frac = round((p - lo) * 2) / 2.0        # 0, 1/2 or 1: clean checkerboard
                 if frac == 1.0:
@@ -213,9 +217,9 @@ def make_scene(kind):
     raise ValueError(kind)
 
 
-BOSS_TONE = {"cube": "fb2a", "sphere": "f7dc", "pyramid": "f74c", "hex": "fa8c"}
+BOSS_TONE = {"cube": "fb2a", "sphere": "77dc", "pyramid": "f74c", "hex": "fa8c"}
 # per enemy slot (cube, sphere, pyramid, unused, star): three variants each
-ENEMY_TONE = [["fb2a"] * 3, ["f7dc"] * 3, ["f74c", "f9ec", "fb2a"], None, ["fa8c"] * 3]
+ENEMY_TONE = [["fb2a"] * 3, ["77dc"] * 3, ["f74c", "f9ec", "fb2a"], None, ["fa8c"] * 3]
 ENEMY_KIND = ["cube", "sphere", "pyramid", "star", "star"]
 
 
@@ -253,19 +257,19 @@ def emit_words(f, name, dims, data):
 
 def frames_for(kind, size, frames, scale):
     scene, pitch, period = make_scene(kind)
-    return render(size, scene, frames, scale, pitch, period)
+    return render(size, scene, frames, scale, pitch, period, dither=kind != "sphere")
 
 
 def emit_boss(f):
     data = []
     for kind in ["cube", "sphere", "pyramid", "hex"]:
-        for rows in frames_for(kind, 28, 16, 28 * 0.52):
+        for rows in frames_for(kind, 28, 16, 28 * (0.48 if kind == "sphere" else 0.52)):
             data += planar(rows, BOSS_TONE[kind], 28)
     emit_words(f, "gfxd_boss", [4, 16, 28 * 2 * 5], data)
 
 
 def emit_enemy(f):
-    scale = {"cube": 0.60, "sphere": 0.54, "pyramid": 0.52, "star": 0.50}
+    scale = {"cube": 0.60, "sphere": 0.46, "pyramid": 0.52, "star": 0.50}
     data = []
     for t in range(5):
         if ENEMY_TONE[t] is None:

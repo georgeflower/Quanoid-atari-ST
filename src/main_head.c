@@ -59,7 +59,7 @@ int ball_box(int x, int y, int bx, int by, int w, int h);   /* gfx2.S */
 int enemy_scan(const void *enemies, int x, int y);
 void blit_sh(u8 *buf, int x, int y, const void *s);
 void blit_pre(u8 *buf, int gx, int y, int h, const u16 *tab);
-#define VERSION "V2.8"
+#define VERSION "005"
 long ikbdws(long count, const char *buf);
 extern unsigned char mouse_btn;
 
@@ -99,6 +99,9 @@ void *memset(void *d, int c, unsigned long n)
 #define PAD_H   6
 #define BALL_S  4
 #define PANEL_X 224
+#define HUD_LEVEL_Y 70
+#define HUD_LIVES_Y 100
+#define HUD_POWER_Y 132
 
 #define COL_BG 0
 #define COL_METAL 9
@@ -163,11 +166,13 @@ static u8 *alloc_screen(void)
 }
 
 extern u8 * volatile pending_screen;
+void queue_screen(u8 *);
+unsigned long video_address(void);
 
 static void show_buffer(u8 *b)
 {
     __asm__ volatile ("" ::: "memory");
-    pending_screen = b;
+    queue_screen(b);
 }
 
 static void raster_build(void);
@@ -176,7 +181,11 @@ static void set_palette(void)
 {
     int i;
     raster_build();
-    for (i = 0; i < 16; i++) ((u16 *)0xff8240)[i] = palette[i];
+    for (i = 0; i < 16; i++)
+#ifndef NORASTER
+        if (i != COL_BRICK && i != COL_PADBODY && i != COL_PADCAP)
+#endif
+            ((u16 *)0xff8240)[i] = palette[i];
 }
 
 /* ---- drawing ---- */

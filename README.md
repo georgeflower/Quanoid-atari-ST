@@ -80,8 +80,28 @@ hatari --tos /path/to/tos.img --auto build/QUANOID.PRG
 
 Video uses the standard 320x200 display, without overscan. The space
 background and hardware border are black; brick and paddle shading still use
-raster colours. Page flips are acknowledged by the VBL handler, and raster
-tables are built separately from the table currently being displayed.
+raster colours. The next page's address is queued before the ST's pre-VBL
+address latch; the VBL handler acknowledges the live Shifter address before
+the old page is reused. Raster tables are built separately from the table
+currently being displayed. Mouse and system-timer handlers allow raster
+interrupts to preempt them.
+Some paddle-shading line artifacts can still occur under controller load.
+
+The on-screen version is the three-digit release/PR number (`005` for
+`qnoid005.st`). LEVEL and LIVES sit below a dedicated boss-HP/exit-counter
+slot; the four power-up lines remain above the footer.
+
+The title includes the Qumran credit and animated capsules. Select START GAME
+or INSTRUCTIONS with the arrow keys or joystick, then press Enter, Space or
+fire. `I` opens instructions directly; Escape quits from the title.
+Instructions show all nine capsule images and their effects. Escape, Enter,
+Space or fire returns to the title.
+
+Balls freeze during the boss-defeat countdown before the existing level
+transition. The level-10 sphere returns light red in its second phase.
+Boss and enemy sprites rotate around both X and Y; spheres have smooth,
+round silhouettes without detached shading pixels.
+Run `python3 tools/test_gensprites.py` to check rotation and sphere masks.
 
 ## Source layout
 
