@@ -501,7 +501,6 @@ static void draw_panel_labels(void)
     draw_box(PANEL_X + 8, HUD_LIVES_Y + 10, 80, 20);
     fill_rect(bg, PANEL_X + 10, 166, 76, 1, COL_METAL);
     draw_text(bg, PANEL_X + 8, 180, "ESC=PAUSE", COL_METAL, COL_DARK);
-    draw_text(bg, PANEL_X + 8, 190, VERSION, COL_METAL, COL_DARK);
     draw_trainer_state();
     draw_text(bg, PANEL_X + 8, 170, sfx_enabled ? "S=SFX ON " : "S=SFX OFF", COL_METAL, COL_DARK);
     hud_fire = hud_turret = hud_barrier = hud_shield = -1;

@@ -114,12 +114,11 @@ currently being displayed. Mouse and system-timer handlers allow raster
 interrupts to preempt them.
 Some paddle-shading line artifacts can still occur under controller load.
 
-The in-game HUD version identifies the release or pull request build, with a
-suffix for revised disks; the main menu has no version label.
-See the filenames in [`releases/`](releases/) for
-the release builds included in this repository. LEVEL and LIVES sit below a
-dedicated boss-HP/exit-counter slot; the four power-up lines remain above the
-footer.
+Neither the in-game HUD nor the main menu displays a version label. See the
+filenames in [`releases/`](releases/) for the release builds included in this
+repository.
+LEVEL and LIVES sit below a dedicated boss-HP/exit-counter slot; the four
+power-up lines remain above the footer.
 
 The title includes the Qumran credit and animated capsules. Select START GAME
 or INSTRUCTIONS with the arrow keys or joystick, then press Enter, Space or
