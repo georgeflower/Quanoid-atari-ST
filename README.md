@@ -1,16 +1,16 @@
 # QUANOID
 
-A native Atari ST breakout/Arkanoid-style game, built from scratch in 68000 C
-and assembly for a real Atari 1040 STFM (developed and tested against
-Hatari). It ports the level designs, bosses, power-ups, enemies and sound
-effects from an earlier browser build ("Vibing Arkanoid") to real ST
-hardware — no TOS-dependent timing, its own interrupt-driven input and sound.
+A native Atari ST brick-breaker, built in 68000 C and assembly. It runs on
+Atari ST systems including the 520ST and 1040STFM, and has also been tested
+with Hatari. The game uses its own interrupt-driven input and sound rather
+than relying on TOS timing.
 
 ## Status
 
-Current shipped version: **V2.8**. Playable end to end: title screen, level
-progression with brick layouts, paddle/ball physics, power-ups, enemies,
-bosses, pause, high-score entry, and a level-complete/exit-door mechanic.
+Playable end to end, with a title screen, level progression, paddle and ball
+physics, power-ups, enemies, bosses, pause, high-score entry, and a
+level-complete/exit-door mechanic. Available release executables and floppy
+images are in [`releases/`](releases/).
 
 ## Gameplay
 
@@ -87,10 +87,11 @@ currently being displayed. Mouse and system-timer handlers allow raster
 interrupts to preempt them.
 Some paddle-shading line artifacts can still occur under controller load.
 
-The on-screen version is the three-digit release/PR number, with a suffix
-for revised disks. The current release is `007` (`qnoid007.st`). LEVEL and LIVES sit below a
-dedicated boss-HP/exit-counter
-slot; the four power-up lines remain above the footer.
+The on-screen version identifies the release or pull request build, with a
+suffix for revised disks. See the filenames in [`releases/`](releases/) for
+the release builds included in this repository. LEVEL and LIVES sit below a
+dedicated boss-HP/exit-counter slot; the four power-up lines remain above the
+footer.
 
 The title includes the Qumran credit and animated capsules. Select START GAME
 or INSTRUCTIONS with the arrow keys or joystick, then press Enter, Space or
@@ -139,9 +140,10 @@ per game frame instead of slowing to a stationary obstacle.
 - `src/blitfast.S`, `src/gfx.S`, `src/math.S`, `src/sys.S`, `src/crt0.S` —
   assembly blitter, line/rect drawing, 68000-safe math, syscalls, startup
 
-## Hardware target
+## Hardware requirements
 
-- CPU: Motorola 68000 @ 8 MHz (real 1040 STFM, no 68020 assumptions)
+- CPU: Motorola 68000 @ 8 MHz (including the Atari 520ST and 1040STFM; no
+  68020 assumptions)
 - Video: 320×200, 4 bitplanes (16 colours)
 - Sound: YM2149 (PSG), 3 voices, driven directly rather than through TOS's
   Dosound/Timer C routine

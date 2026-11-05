@@ -1,5 +1,5 @@
-/* Qarkanoid - Atari ST port of the Qarkanoid browser game
- * milestone 4: power-ups, title, high scores
+/* QUANOID - Atari ST brick-breaker
+ * power-ups, title, high scores
  * 320x200 low res, double buffer, dirty rectangles, 50 Hz.
  */
 #include "levels.h"

@@ -9,8 +9,8 @@ Project home: https://emutos.sourceforge.io/
 
 ```sh
 hatari --tos roms/etos512se.img --auto build/QUANOID.PRG
-# or boot the floppy image:
-hatari --tos roms/etos512se.img --disk-a releases/QUANOID-v2.8.ST
+# or boot a release floppy image from releases/:
+hatari --tos roms/etos512se.img --disk-a releases/qnoid003.st
 ```
 
 See `EMUTOS-LICENSE.txt` for the full GPLv2 text.
