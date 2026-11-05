@@ -1,8 +1,7 @@
 # QUANOID
 
 A native Atari ST brick-breaker, built in 68000 C and assembly. It runs on
-Atari ST systems including the 520ST and 1040STFM, and has also been tested
-with Hatari. The game uses its own interrupt-driven input and sound rather
+Atari ST systems including the 520ST and 1040STFM. The game uses its own interrupt-driven input and sound rather
 than relying on TOS timing.
 
 ## Status
